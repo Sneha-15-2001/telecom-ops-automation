@@ -14,7 +14,9 @@ app = FastAPI(title="AI Incident Investigator", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:4200"],
+    # Both localhost spellings: browsers treat 127.0.0.1 and localhost as different origins.
+    allow_origins=["http://localhost:5173", "http://localhost:4200",
+                   "http://127.0.0.1:5173", "http://127.0.0.1:4200"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
