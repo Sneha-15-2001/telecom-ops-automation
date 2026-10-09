@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import investigator, rca as rca_builder
+from . import chatbot, investigator, rca as rca_builder
 
 app = FastAPI(title="AI Incident Investigator", version="0.1.0")
 
@@ -23,6 +23,11 @@ app.add_middleware(
 class InvestigateRequest(BaseModel):
     incident_text: str
     mode: str = "llm"  # "llm" (default, falls back gracefully) or "rules"
+
+
+class ChatRequest(BaseModel):
+    message: str
+    mode: str = "llm"
 
 
 @app.get("/api/health")
@@ -44,3 +49,10 @@ def make_rca(req: InvestigateRequest):
     doc = rca_builder.build_rca(inv)
     return {"rca": doc, "markdown": rca_builder.to_markdown(doc),
             "investigation": inv}
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest):
+    """Conversational ops: investigate, RCA, health, reproduce, help."""
+    mode = req.mode if req.mode in ("llm", "rules") else "llm"
+    return chatbot.chat(req.message, mode=mode)
