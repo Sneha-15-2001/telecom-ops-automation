@@ -47,12 +47,14 @@ def investigate(incident_text: str, mode: str = "llm") -> dict:
         # The LLM still reads the ticket + candidates so systemic issues (no single
         # ID, e.g. N+1 slowness) get a genuine verdict instead of silence.
         candidates = dbcheck.recent_candidates()
+        from . import codeindex as _ci2
         llm = llmreason.reason(incident_text, {
             "entities": entities,
             "candidates": candidates,
             "caution": ("The candidate rows are OTHER open items shown for triage, NOT "
                         "evidence for this ticket. Do NOT cite them as the cause. Reason ONLY "
                         "from the ticket wording; keep confidence low; recommend adding an ID."),
+            "code_catalog": _ci2.catalog(),
             "note": "No traceable ID — reason from the ticket wording and candidate patterns.",
         }) if mode == "llm" else {"enabled": False, "reason": "Rule mode has no verdicts."}
         analysis = (llm.get("analysis") or {}) if llm.get("enabled") else {}
@@ -97,11 +99,13 @@ def investigate(incident_text: str, mode: str = "llm") -> dict:
                 break
     from . import logsearch as _ls
     raw_lines = [f"[{h['service']}] {h['line']}" for h in logs["log_lines"][:60]]
+    from . import codeindex as _ci
     llm = llmreason.reason(incident_text, {
         "entities": entities,
         "journey": logs["journey"],
         "raw_log_lines": raw_lines,
         "db_evidence": db,
+        "code_catalog": _ci.catalog(),
     })
     result = {
         "incident_text": incident_text,

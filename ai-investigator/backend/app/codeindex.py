@@ -115,3 +115,34 @@ def locate(service: str, area: str):
         if hit:
             out["methods"].append(hit)
     return out
+
+
+def catalog() -> dict:
+    """Live class -> public-method catalog of the Java backend (for prompts).
+
+    Gives the model only REAL method names to choose from, killing invented
+    methods like queueNotification. Computed from disk on every call."""
+    result = {}
+    for service, dirname in (("customer-service", "customer-service"),
+                             ("order-service", "order-service"),
+                             ("inventory-service", "inventory-service"),
+                             ("provisioning-service", "provisioning-service"),
+                             ("notification-service", "notification-service")):
+        root = REPO_ROOT / dirname
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*.java")):
+            if "/test/" in str(path):
+                continue
+            try:
+                src = open(path, encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            cls = re.search(r"\bclass\s+(\w+)", src)
+            if not cls:
+                continue
+            methods = re.findall(r"public\s+[\w<>\[\],\s]+\s+(\w+)\s*\(", src)
+            methods = [m for m in dict.fromkeys(methods) if m != cls.group(1)]
+            if methods:
+                result[f"{service}:{cls.group(1)}"] = methods
+    return result

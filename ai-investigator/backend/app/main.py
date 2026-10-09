@@ -139,15 +139,52 @@ def data_fix(req: InvestigateRequest):
 @app.post("/api/codefix")
 def code_fix(req: InvestigateRequest):
     """Permanent code-fix proposals for a ticket (proposal only, review required)."""
+    from . import llmreason
     mode = req.mode if req.mode in ("llm", "rules") else "llm"
     inv = investigator.investigate(req.incident_text, mode=mode)
     out = codefix.propose(inv, req.incident_text)
     llm = inv.get("llm") or {}
     if llm.get("enabled") and (llm.get("analysis") or {}).get("code_fix"):
         out["llm_code_fix"] = llm["analysis"]["code_fix"]
-    # Ground every proposal in real files + line numbers (no invented locations).
+    # Validate drafts against the live code catalog; repair once via the model
+    # when it invents names. Never show unverified locations as fact.
     for f in out.get("fixes", []):
-        area = f.get("area", "") or ""
-        extra = f" {f.get('class_name', '')} {f.get('method', '')}" if isinstance(f, dict) else ""
-        f["location"] = codeindex.locate(f.get("service", ""), area + extra)
+        f["location"] = codeindex.locate(f.get("service", ""), f.get("area", ""))
+    bad = [f for f in out.get("fixes", [])
+           if f.get("location") and not (f["location"].get("methods"))
+           and f.get("class_name")]
+    if bad and llm.get("enabled"):
+        from . import codeindex as _ci
+        narrowed = {}
+        for f in bad:
+            for key, methods in _ci.catalog().items():
+                if key.endswith(":" + (f.get("class_name") or "")):
+                    narrowed[key] = methods
+        repair = llmreason.reason(
+            req.incident_text,
+            {"broken_drafts": [{k: f.get(k) for k in ("title", "service", "area", "class_name", "method", "before", "after")} for f in bad],
+             "valid_methods_only": narrowed,
+             "instruction": ("Your draft used a method name that DOES NOT EXIST. "
+                             "Set method to one of the valid methods listed above — character for character. "
+                             "If none fits the change, set method to the closest real one and say so in area.")},
+            system_override=(
+                "You draft Java code fixes. Re-emit ONLY a JSON object {\"fixes\": [...]} "
+                "with the same fixes, corrected: class_name AND method MUST be copied "
+                "EXACTLY from valid_methods_only. before/after MUST be Java code blocks "
+                "(3+ lines) calling those real methods in Spring/JPA style. "
+                "code_fix shape: {service, area, class_name, method, before, after}."))
+        fixed = ((repair.get("analysis") or {}).get("fixes")
+                 if isinstance(repair.get("analysis"), dict) else None) or repair.get("fixes")
+        if isinstance(fixed, list) and fixed:
+            bad_ids = {id(f) for f in bad}
+            queue = [g for g in fixed if isinstance(g, dict)]
+            for f in out["fixes"]:
+                if id(f) in bad_ids and queue:
+                    g = queue.pop(0)
+                    for k in ("class_name", "method", "before", "after", "area", "title"):
+                        if g.get(k):
+                            f[k] = g[k]
+                    f["location"] = codeindex.locate(f.get("service", ""),
+                                                     f" {f.get('class_name','')} {f.get('method','')}")
+                    f["repaired"] = True
     return {"incident_text": req.incident_text, "suspect": inv.get("suspect"), **out}

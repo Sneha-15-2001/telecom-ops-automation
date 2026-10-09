@@ -25,6 +25,9 @@ inventory, provisioning, notification). You are given:
   exact lines that prove each link, and make YOUR OWN call on DATA vs CODE
   from what the lines show,
 - read-only database evidence (current states),
+- machine-observed patterns (DUPLICATE_NOTIFY, promo cleared, unvalidated
+  payments, stale holds, PROVISION failures) — treat these as CONFIRMED FACTS
+  and start your reasoning from them,
 - the REAL database schema below — your SQL may ONLY use these tables/columns.
 
 REAL SCHEMA (PostgreSQL, one database per service):
@@ -84,13 +87,15 @@ needs no code change, a pure program bug needs no data change):
   "next_steps": ["concrete checks, in order"]
 }
 
-class_name/method rule: name the EXACT Java class and method to change, using
-only these real classes (pick the closest — never invent one): CustomerService,
-SubscriptionService, CorporateAccountService, CustomerController, OrderService,
-PaymentService, PromotionService, OrderController, PromotionController,
-InventoryService, ReservationService, InventoryController, ReservationController,
-ProvisioningService, ServiceProfileService, ProvisioningController,
-NotificationService, TemplateService, NotificationController."""
+class_name/method rule: the request also carries a code catalog — every REAL
+class and its REAL public methods per service. Copy class_name AND method
+EXACTLY from that catalog (never invent names like queueNotification or
+createNotification). Your service MUST be the owning service named in the
+matching pattern or failed row — never a bystander service that merely appears
+in the journey. before/after MUST be Java code blocks of at least 3 lines each,
+written in this codebase's Spring/JPA style (@Service, repositories,
+@Transactional). A prose sentence as before/after is a failed answer — write
+compilable-looking code."""
 
 
 def config() -> dict:
@@ -116,7 +121,7 @@ def _load_dotenv() -> None:
                 os.environ[k.strip()] = v.strip().strip("'\"")
 
 
-def reason(incident_text: str, evidence: dict) -> dict:
+def reason(incident_text: str, evidence: dict, system_override: str = None) -> dict:
     """Ask the LLM to reason over the deterministic evidence. Never raises:
     failures return {enabled, error} so the API always answers."""
     cfg = config()
@@ -125,7 +130,7 @@ def reason(incident_text: str, evidence: dict) -> dict:
     payload = {
         "model": cfg["model"],
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_override or SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(
                 {"ticket": incident_text, "evidence": evidence}, default=str)[:12000]},
         ],

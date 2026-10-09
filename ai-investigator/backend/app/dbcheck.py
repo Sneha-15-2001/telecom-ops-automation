@@ -119,6 +119,7 @@ def collect(entities: dict, log_result: dict) -> dict:
                 seen.add(o["id"])
                 uniq.append(o)
         evidence["orders"] = uniq
+    evidence["patterns"] = _patterns(evidence)
     for key, idkey in (("provisioning", "request_number"),
                        ("reservations", "reservation_number"),
                        ("notifications", "notification_number")):
@@ -130,6 +131,41 @@ def collect(entities: dict, log_result: dict) -> dict:
                     uniq.append(r)
             evidence[key] = uniq
     return evidence
+
+
+def _patterns(ev: dict) -> list:
+    """Machine-observed facts (counts and state combinations), not verdicts.
+    The model starts from these instead of rediscovering them."""
+    out = []
+    notes = {}
+    for n in ev.get("notifications", []):
+        key = (n.get("order_id"), n.get("template_code"))
+        notes.setdefault(key, []).append(n)
+    for (oid, code), rows in notes.items():
+        if len(rows) > 1:
+            out.append(f"DUPLICATE_NOTIFY (owning service: notification-service): {len(rows)}× {code} for order {oid} "
+                       f"({', '.join(str(r.get('notification_number')) for r in rows)})")
+    for o in ev.get("orders", []):
+        if o.get("promo_code") is None:
+            out.append(f"ORDER {o.get('order_number')} has no promo applied now")
+    for p in ev.get("payments", []):
+        if str(p.get("status", "")).upper() == "PENDING":
+            out.append(f"PAYMENT {p.get('payment_reference')} PENDING (unvalidated) (owning service: order-service)")
+    for r in ev.get("reservations", []):
+        if str(r.get("status", "")).upper() == "ACTIVE":
+            out.append(f"HOLD {r.get('reservation_number')} ACTIVE on "
+                       f"{r.get('resource_number')} (owning service: inventory-service)")
+    for p in ev.get("provisioning", []):
+        if str(p.get("status", "")).upper() == "FAILED" and p.get("last_error"):
+            out.append(f"PROVISION {p.get('request_number')} FAILED: {p['last_error']} "
+                       f"(owning service: provisioning-service)")
+    hist = ev.get("order_history", [])
+    events = [h.get("event") for h in hist]
+    if "PROMOTION_APPLIED" in events:
+        out.append("PROMOTION_APPLIED present in order history")
+    if "PAYMENT_RECORDED" in events and "PAYMENT_VALIDATED" not in events:
+        out.append("PAYMENT_RECORDED without PAYMENT_VALIDATED in history")
+    return out
 
 
 def resolve_order_ids(entities: dict) -> dict:
