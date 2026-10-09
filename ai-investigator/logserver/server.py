@@ -40,18 +40,28 @@ MAX_LINES = 2000
 def _read(service: str, grep: str = "", tail: int = 0) -> list:
     if service not in SERVICES:
         return []
-    path = LOG_ROOT / service / "app.log"
-    if not path.exists():
-        return []
+    import gzip
+    paths = sorted((LOG_ROOT / service).glob("app.*.log.gz"))
+    now = LOG_ROOT / service / "app.log"
+    if now.exists():
+        paths.append(now)
     out = []
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            line = line.rstrip("\n")
-            if grep and grep.lower() not in line.lower():
-                continue
-            out.append(line)
-            if len(out) >= MAX_LINES:
-                break
+    for path in paths:
+        try:
+            fh = gzip.open(path, "rt", encoding="utf-8", errors="replace") if path.suffix == ".gz" \
+                else open(path, encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        with fh:
+            for line in fh:
+                line = line.rstrip("\n")
+                if grep and grep.lower() not in line.lower():
+                    continue
+                out.append(line)
+                if len(out) >= MAX_LINES:
+                    break
+        if len(out) >= MAX_LINES:
+            break
     return out[-tail:] if tail > 0 else out
 
 

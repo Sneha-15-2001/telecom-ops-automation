@@ -42,12 +42,23 @@ def _iter_lines(service: str):
     if LOG_PULL_BASE:
         yield from _iter_lines_http(service)
         return
-    path = LOG_ROOT / service / "app.log"
-    if not path.exists():
-        return
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            yield line.rstrip("\n")
+    # Current file PLUS rolled .gz archives — rotation must never hide evidence.
+    paths = sorted((LOG_ROOT / service).glob("app.*.log.gz"))
+    logs_now = LOG_ROOT / service / "app.log"
+    if logs_now.exists():
+        paths.append(logs_now)
+    import gzip
+    for path in paths:
+        try:
+            if path.suffix == ".gz":
+                fh = gzip.open(path, "rt", encoding="utf-8", errors="replace")
+            else:
+                fh = open(path, encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        with fh:
+            for line in fh:
+                yield line.rstrip("\n")
 
 
 def _iter_lines_http(service: str):
