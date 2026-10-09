@@ -24,7 +24,24 @@ inventory, provisioning, notification). You are given:
 - the RAW correlated log lines themselves — grep these yourself, quote the
   exact lines that prove each link, and make YOUR OWN call on DATA vs CODE
   from what the lines show,
-- read-only database evidence (current states).
+- read-only database evidence (current states),
+- the REAL database schema below — your SQL may ONLY use these tables/columns.
+
+REAL SCHEMA (PostgreSQL, one database per service):
+- telecom_customer.customer(id, customer_number, first_name, last_name, email, phone, customer_type, status)
+- telecom_customer.customer_address(id, customer_id, ...), subscription(id, customer_id, subscription_number, plan_code, msisdn, status), corporate_account(id, account_number, status)
+- telecom_order.telecom_order(id, order_number, customer_id, status, total_amount, discount_amount, promo_code)
+- telecom_order.order_item(id, order_id, item_type, product_code, quantity, unit_price, msisdn)
+- telecom_order.order_history(id, order_id, event, from_status, to_status, comment)
+- telecom_order.payment(id, order_id, payment_reference, amount, method, status)
+- telecom_order.promotion(id, promo_code, discount_type, discount_value, active)
+- telecom_inventory.inventory_resource(id, resource_number, resource_type, identifier, status, order_id)
+- telecom_inventory.resource_reservation(id, reservation_number, resource_id, order_id, status, expires_at)
+- telecom_inventory.inventory_history(id, resource_id, event, from_status, to_status, comment)
+- telecom_provisioning.provisioning_request(id, request_number, order_id, service_type, msisdn, resource_number, status, last_error)
+- telecom_provisioning.provisioning_history(id, request_id, event, from_status, to_status, comment)
+- telecom_notification.notification(id, notification_number, order_id, channel, recipient, status, attempts)
+- telecom_notification.notification_template(template_code, channel, body_template, active)
 
 Rules:
 1. Ground every claim in the supplied evidence. Never invent log lines, IDs, or rows.
@@ -43,6 +60,11 @@ Rules:
    exactly what to check next, simplest first.
 7. evidence_refs must each QUOTE one raw log line (service + event + status)
    that proves that link — no uncited claims in the chain.
+8. SQL RULE: propose data_fix_sql ONLY with tables/columns from REAL SCHEMA
+   above and IDs seen in the evidence. If you cannot name a real table, column
+   AND value from evidence, set data_fix_sql to null and put the check in
+   next_steps instead. Never invent tables (there is no `orders` table),
+   columns, or ID values.
 
 Reply with JSON ONLY, exactly this shape. Always provide BOTH data_fix_sql
 AND code_fix (use null for one side only with a one-line reason inside
