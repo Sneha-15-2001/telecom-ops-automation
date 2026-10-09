@@ -3,57 +3,8 @@ import './App.css'
 
 const API = 'http://localhost:8090'
 
-const SAMPLES = [
-  'INC-10101 Order ORD-68D80E09 stuck in PAYMENT_PENDING although payment was recorded.',
-  'INC-10102 eSIM provisioning PRV-D7AC40C1 FAILED for order 2.',
-  'INC-10106 Order ORD-8495EEAF FAILED at validation: customer CUS-DEMO003 SUSPENDED.',
-  'INC-10103 reservation RSV-22B3887F stuck ACTIVE for order 9999; MSISDN RES-B2979633 blocked RESERVED.',
-]
-
-const TICKETS = [
-  { id: 'INC-10101', title: 'Order stuck in PAYMENT_PENDING after UPI payment', status: 'Open', priority: 'P2',
-    reporter: 'Customer Care', created: '2026-10-07 14:35', order: 'ORD-68D80E09', error: 'No PAYMENT_VALIDATED event',
-    text: SAMPLES[0] },
-  { id: 'INC-10102', title: 'eSIM activation failing in night batch', status: 'Open', priority: 'P2',
-    reporter: 'Activation Team', created: '2026-10-07 02:14', order: 'order 2', error: 'MISSING_MSISDN',
-    text: SAMPLES[1] },
-  { id: 'INC-10103', title: 'MSISDN blocked by dead reservation', status: 'Open', priority: 'P3',
-    reporter: 'Inventory Ops', created: '2026-10-06 11:02', order: 'order 9999', error: 'Hold ACTIVE past TTL',
-    text: SAMPLES[3] },
-  { id: 'INC-10104', title: 'Customer never got ORDER_COMPLETED SMS', status: 'Open', priority: 'P3',
-    reporter: 'Customer Care', created: '2026-10-07 16:48', order: 'order 2', error: '550 recipient rejected',
-    text: 'INC-10104 ORDER_COMPLETED SMS for order 2 never delivered although the order completed.' },
-  { id: 'INC-10105', title: 'Duplicate ORDER_COMPLETED SMS', status: 'Open', priority: 'P3',
-    reporter: 'Customer (complaint)', created: '2026-10-07 18:20', order: 'order 2', error: 'Same event sent twice',
-    text: 'INC-10105 Duplicate ORDER_COMPLETED SMS for order 2 within a minute.' },
-  { id: 'INC-10106', title: 'Order auto-failed, customer claims account fine', status: 'Open', priority: 'P2',
-    reporter: 'Enterprise Sales', created: '2026-10-07 10:05', order: 'ORD-8495EEAF', error: 'CUSTOMER_NOT_ACTIVE:SUSPENDED',
-    text: SAMPLES[2] },
-  { id: 'INC-10107', title: 'Order parked in RETRYING for hours', status: 'Open', priority: 'P3',
-    reporter: 'Ops Dashboard', created: '2026-10-07 21:12', order: 'ORD-475DC248', error: 'No revalidation after retry',
-    text: 'INC-10107 Order ORD-475DC248 stuck in RETRYING after a failed payment, never revalidated.' },
-  { id: 'INC-10108', title: 'Order queue page slow at scale', status: 'Open', priority: 'P2',
-    reporter: 'Storefront Team', created: '2026-10-06 09:30', order: '—', error: 'N+1 selects on order_item',
-    text: 'INC-10108 GET /api/orders is slow: N+1 selects on order_item, one per order in the page, breaching response SLA.' },
-  { id: 'INC-10109', title: 'Discount vanished after edit, bill shock', status: 'Open', priority: 'P3',
-    reporter: 'Customer (complaint)', created: '2026-10-07 13:44', order: 'ORD-038A154B', error: 'Promo cleared on modify',
-    text: 'INC-10109 Promo FESTIVE10 vanished from order ORD-038A154B after modify; payable jumped (overcharge complaint).' },
-  { id: 'INC-10110', title: 'SIM stuck RESERVED, hold can never confirm', status: 'Open', priority: 'P2',
-    reporter: 'Inventory Ops', created: '2026-10-07 08:15', order: 'order 8888', error: 'Reservation expired, 400 forever',
-    text: 'INC-10110 reservation RSV-C5396D47 can never confirm after TTL; SIM stuck RESERVED.' },
-  { id: 'INC-10111', title: 'Corporate bulk: 2 of 3 connections live', status: 'Open', priority: 'P2',
-    reporter: 'Enterprise Sales', created: '2026-10-07 15:26', order: 'bulk batch', error: '1 item rejected (customerId null)',
-    text: 'INC-10111 Bulk corporate order partially failed: 2 created, 1 item rejected (customerId null).' },
-  { id: 'INC-10112', title: 'Port booked, broadband dead', status: 'Open', priority: 'P2',
-    reporter: 'Field Team', created: '2026-10-07 12:40', order: 'order 7777', error: 'MISSING_RESOURCE (unlinked port)',
-    text: 'INC-10112 Broadband activation FAILED (MISSING_RESOURCE) although fiber port is reserved for order 7777.' },
-  { id: 'INC-10113', title: '"Lucky number" refused at store', status: 'Open', priority: 'P2',
-    reporter: 'Store Agent', created: '2026-10-07 11:18', order: '—', error: 'MSISDN already in use',
-    text: 'INC-10113 MSISDN 919000007771 refused for customer 2: already in use by customer 1.' },
-  { id: 'INC-10114', title: 'Festival flyer promo rejected', status: 'Open', priority: 'P3',
-    reporter: 'Customer Care', created: '2026-10-07 17:55', order: 'order 76', error: 'Outside validity window',
-    text: 'INC-10114 Promo EXPIRED5 rejected for order 76: outside validity window, flyer still circulating.' },
-]
+// No hardcoded tickets: the queue loads live from GET /api/incidents.
+// (Old curated samples removed — they referenced deleted rows and misled.)
 
 function Pill({ tone, children }) {
   return <span className={`pill ${tone}`}>{children}</span>
@@ -68,7 +19,7 @@ function toneFor(status) {
 }
 
 export default function App() {
-  const [text, setText] = useState(SAMPLES[0])
+  const [text, setText] = useState('')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -94,7 +45,7 @@ export default function App() {
       .catch(() => {})
   }, [])
 
-  const queue = liveTickets || TICKETS
+  const queue = liveTickets || []
 
   function toggleTheme() {
     setTheme((t) => (t === 'light' ? 'dark' : 'light'))
@@ -189,22 +140,21 @@ export default function App() {
           </button>
         </div>
         <div className="btn-row">
-          {SAMPLES.map((s, i) => (
-            <button key={i} className="btn small ghost" onClick={() => setText(s)}>Sample {i + 1}</button>
-          ))}
+          <span className="muted">Pick a ticket below — its text loads above, then Investigate.</span>
         </div>
         {error && <div className="alert error">{error}</div>}
       </section>
 
       <section className="card">
-        <h2>Incident queue{liveTickets ? ` — live from the databases (${liveTickets.length})` : ' — curated list (backend unreachable)'}</h2>
-        <p className="explainer">Live tickets are built fresh from current FAILED/stuck rows — resolved ones disappear, new ones appear. Click to load.</p>
+        <h2>Incident queue{liveTickets ? ` — live from the databases (${liveTickets.length})` : ' — waiting for backend…'}</h2>
+        {!liveTickets && <p className="explainer">Start the investigator backend (:8090) — the queue builds itself from current failures.</p>}
+        {liveTickets && <p className="explainer">Live tickets built fresh from current FAILED/stuck rows — resolved ones disappear, new ones appear. Click to load.</p>}
         <div className="jira-grid">
           {queue.map((t) => (
             <button key={t.id} className="jira" onClick={() => { setText(t.text); setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} title={t.text}>
               <div className="jira-top"><strong>{t.id}</strong><span className={`pill ${t.priority === 'P2' ? 'red' : 'amber'}`}>{t.priority}</span></div>
               <div className="jira-title">{t.title}</div>
-              <div className="jira-meta">🧑 {t.reporter} · 🕒 {t.created}</div>
+              <div className="jira-meta">🧑 {t.reporter}{t.created ? ` · 🕒 ${t.created}` : ''}</div>
               <div className="jira-meta">📦 {t.order} · ⚠️ {t.error}</div>
               <div className="jira-meta"><span className="pill navy">{t.status}</span></div>
             </button>
@@ -313,7 +263,8 @@ export default function App() {
           </section>
 
           <div className="grid two">
-            <section className="card">
+            <details className="card" open>
+              <summary className="sum">IDs + stored records (technical — open to inspect)</summary>
               <h2>Extracted entities</h2>
             <p className="explainer">Names and numbers pulled out of your ticket — everything below is traced from these.</p>
               {Object.entries(result.entities).map(([k, v]) => (
@@ -327,7 +278,7 @@ export default function App() {
                   <pre>{JSON.stringify(rows, null, 1).slice(0, 1200)}</pre>
                 </div>
               ))}
-            </section>
+            </details>
             <section className="card">
               <h2>Service journey</h2>
               <p className="explainer">Every step your request took, in time order, across all five services.</p>
@@ -339,11 +290,10 @@ export default function App() {
             </section>
           </div>
 
-          <section className="card">
-            <h2>Relevant log lines ({result.log_lines.length})</h2>
-            <p className="explainer">The exact lines the verdict is built on — this is the proof, not decoration.</p>
+          <details className="card">
+            <summary className="sum">Relevant log lines ({result.log_lines.length}) — the exact proof</summary>
             <pre className="logs">{result.log_lines.map((l) => `[${l.service}] ${l.line}`).join('\n')}</pre>
-          </section>
+          </details>
 
           <section className="card">
             <h2>Root Cause Analysis</h2>
