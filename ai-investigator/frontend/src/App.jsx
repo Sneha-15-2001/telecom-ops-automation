@@ -73,6 +73,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [useLlm, setUseLlm] = useState(() => localStorage.getItem('ai-mode') !== 'rules')
+  const [liveTickets, setLiveTickets] = useState(null)
   const [rca, setRca] = useState(null)
   const [rcaLoading, setRcaLoading] = useState(false)
   const [fixes, setFixes] = useState(null)
@@ -83,6 +84,17 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('ai-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    fetch(`${API}/api/incidents`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && d.tickets && d.tickets.length) setLiveTickets(d.tickets)
+      })
+      .catch(() => {})
+  }, [])
+
+  const queue = liveTickets || TICKETS
 
   function toggleTheme() {
     setTheme((t) => (t === 'light' ? 'dark' : 'light'))
@@ -185,9 +197,10 @@ export default function App() {
       </section>
 
       <section className="card">
-        <h2>Incident queue — live Jira-style board (click a ticket to investigate)</h2>
+        <h2>Incident queue{liveTickets ? ` — live from the databases (${liveTickets.length})` : ' — curated list (backend unreachable)'}</h2>
+        <p className="explainer">Live tickets are built fresh from current FAILED/stuck rows — resolved ones disappear, new ones appear. Click to load.</p>
         <div className="jira-grid">
-          {TICKETS.map((t) => (
+          {queue.map((t) => (
             <button key={t.id} className="jira" onClick={() => { setText(t.text); setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} title={t.text}>
               <div className="jira-top"><strong>{t.id}</strong><span className={`pill ${t.priority === 'P2' ? 'red' : 'amber'}`}>{t.priority}</span></div>
               <div className="jira-title">{t.title}</div>

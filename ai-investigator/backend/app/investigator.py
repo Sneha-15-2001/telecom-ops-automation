@@ -171,9 +171,11 @@ def investigate(incident_text: str, mode: str = "llm") -> dict:
     }
     result["mode"] = mode
     if mode == "llm":
+        raw_lines = [f"[{h['service']}] {h['line']}" for h in logs["log_lines"][:60]]
         result["llm"] = llmreason.reason(incident_text, {
             "entities": entities,
             "journey": logs["journey"],
+            "raw_log_lines": raw_lines,
             "suspect": suspect,
             "rule_hypothesis": result["hypothesis"],
             "db_evidence": db,

@@ -180,12 +180,12 @@ def recent_candidates() -> dict:
     if o.get("rows"):
         out["suspicious_orders"] = o["rows"]
     p = _select("provisioning",
-                "SELECT request_number, service_type, status FROM provisioning_request "
+                "SELECT request_number, service_type, status, last_error FROM provisioning_request "
                 "WHERE status = 'FAILED' ORDER BY id DESC LIMIT 5", ())
     if p.get("rows"):
         out["failed_provisioning"] = p["rows"]
     n = _select("notification",
-                "SELECT notification_number, channel, status FROM notification "
+                "SELECT notification_number, channel, status, last_error FROM notification "
                 "WHERE status = 'FAILED' ORDER BY id DESC LIMIT 5", ())
     if n.get("rows"):
         out["failed_notifications"] = n["rows"]

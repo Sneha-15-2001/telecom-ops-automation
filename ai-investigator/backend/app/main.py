@@ -58,6 +58,52 @@ def chat(req: ChatRequest):
     return chatbot.chat(req.message, mode=mode)
 
 
+@app.get("/api/incidents")
+def live_incidents():
+    """Live incident queue built from current DB state (no hardcoded tickets).
+    Each item carries ready-to-investigate ticket text with real IDs."""
+    from . import dbcheck
+    cands = dbcheck.recent_candidates()
+    tickets = []
+    for o in cands.get("suspicious_orders", []):
+        status = o.get("status", "")
+        verb = {"FAILED": "failed", "PAYMENT_PENDING": "stuck with payment recorded but unvalidated",
+                "RETRYING": "parked without revalidation"}.get(status, f"in state {status}")
+        tickets.append({
+            "id": f"LIVE-{o.get('order_number')}",
+            "title": f"Order {o.get('order_number')} {verb}",
+            "status": "Open", "priority": "P2", "reporter": "Ops watchlist",
+            "order": o.get("order_number"), "error": status,
+            "text": f"Order {o.get('order_number')} {verb} (order {o.get('id')}).",
+        })
+    for p in cands.get("failed_provisioning", []):
+        tickets.append({
+            "id": f"LIVE-{p.get('request_number')}",
+            "title": f"Provisioning {p.get('request_number')} failed",
+            "status": "Open", "priority": "P2", "reporter": "Ops watchlist",
+            "order": "—", "error": (p.get("last_error") or "FAILED")[:60],
+            "text": f"Provisioning {p.get('request_number')} ({p.get('service_type')}) FAILED.",
+        })
+    for n in cands.get("failed_notifications", []):
+        tickets.append({
+            "id": f"LIVE-{n.get('notification_number')}",
+            "title": f"Notification {n.get('notification_number')} failed",
+            "status": "Open", "priority": "P3", "reporter": "Ops watchlist",
+            "order": "—", "error": (n.get("last_error") or "FAILED")[:60],
+            "text": f"Notification {n.get('notification_number')} ({n.get('channel')}) FAILED.",
+        })
+    for r in cands.get("open_reservations", []):
+        tickets.append({
+            "id": f"LIVE-{r.get('reservation_number')}",
+            "title": f"Hold {r.get('reservation_number')} still open",
+            "status": "Open", "priority": "P3", "reporter": "Ops watchlist",
+            "order": f"order {r.get('order_id')}", "error": f"resource {r.get('resource_number')} held",
+            "text": (f"Reservation {r.get('reservation_number')} stuck ACTIVE for order {r.get('order_id')}; "
+                     f"resource {r.get('resource_number')} blocked."),
+        })
+    return {"tickets": tickets, "count": len(tickets)}
+
+
 @app.post("/api/datafix")
 def data_fix(req: InvestigateRequest):
     """Temporary data-fix proposals for a ticket (proposal only, approval required)."""

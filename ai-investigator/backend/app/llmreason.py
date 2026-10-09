@@ -21,6 +21,10 @@ inventory, provisioning, notification). You are given:
 - the original ticket text,
 - entities extracted deterministically (trust these IDs),
 - a correlated cross-service log journey (chronological),
+- the RAW correlated log lines themselves — grep these yourself, quote the
+  exact lines that prove each link, and make YOUR OWN call on DATA vs CODE
+  from what the lines show (a rule-based hint is included only as a second
+  opinion; you may overrule it when the lines say otherwise),
 - read-only database evidence (current states),
 - a rule-based suspect hypothesis (a starting point, not gospel).
 
@@ -39,6 +43,8 @@ Rules:
    in plain words first, code second.
 6. If evidence is thin, say so in one plain sentence and lower confidence; list
    exactly what to check next, simplest first.
+7. evidence_refs must each QUOTE one raw log line (service + event + status)
+   that proves that link — no uncited claims in the chain.
 
 Reply with JSON ONLY, exactly this shape:
 {
