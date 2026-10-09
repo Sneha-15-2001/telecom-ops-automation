@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import chatbot, codefix, datafix, investigator, rca as rca_builder
+from . import chatbot, codefix, codeindex, datafix, investigator, rca as rca_builder
 
 app = FastAPI(title="AI Incident Investigator", version="0.1.0")
 
@@ -145,4 +145,9 @@ def code_fix(req: InvestigateRequest):
     llm = inv.get("llm") or {}
     if llm.get("enabled") and (llm.get("analysis") or {}).get("code_fix"):
         out["llm_code_fix"] = llm["analysis"]["code_fix"]
+    # Ground every proposal in real files + line numbers (no invented locations).
+    for f in out.get("fixes", []):
+        area = f.get("area", "") or ""
+        extra = f" {f.get('class_name', '')} {f.get('method', '')}" if isinstance(f, dict) else ""
+        f["location"] = codeindex.locate(f.get("service", ""), area + extra)
     return {"incident_text": req.incident_text, "suspect": inv.get("suspect"), **out}

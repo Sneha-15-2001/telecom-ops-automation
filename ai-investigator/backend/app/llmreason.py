@@ -79,9 +79,18 @@ needs no code change, a pure program bug needs no data change):
   "data_fix_sql": "proposal or null",
   "data_fix_validation": "SELECT to verify, or null",
   "data_fix_rollback": "rollback note, or null",
-  "code_fix": {"service": "", "area": "", "before": "", "after": ""} or null,
+  "code_fix": {"service": "", "area": "", "class_name": "", "method": "",
+               "before": "", "after": ""} or null,
   "next_steps": ["concrete checks, in order"]
-}"""
+}
+
+class_name/method rule: name the EXACT Java class and method to change, using
+only these real classes (pick the closest — never invent one): CustomerService,
+SubscriptionService, CorporateAccountService, CustomerController, OrderService,
+PaymentService, PromotionService, OrderController, PromotionController,
+InventoryService, ReservationService, InventoryController, ReservationController,
+ProvisioningService, ServiceProfileService, ProvisioningController,
+NotificationService, TemplateService, NotificationController."""
 
 
 def config() -> dict:

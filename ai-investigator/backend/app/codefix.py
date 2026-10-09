@@ -23,6 +23,8 @@ def propose(inv: dict, incident_text: str = "") -> dict:
             "title": f"Code fix in {draft.get('service', '?')}",
             "service": draft.get("service", "?"),
             "area": draft.get("area", "?"),
+            "class_name": draft.get("class_name", ""),
+            "method": draft.get("method", ""),
             "problem": analysis.get("root_cause", ""),
             "before": draft.get("before", ""),
             "after": draft.get("after", ""),

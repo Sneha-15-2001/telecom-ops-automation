@@ -324,6 +324,18 @@ export default function App() {
                   <div key={i} className="fix">
                     <h3>{f.title}</h3>
                     <p className="muted">{f.service} · {f.area}</p>
+                    {f.location?.class_file && (
+                      <p>📄 <code>{f.location.class_file.file}</code> <span className="muted">({f.location.class_file.lines} lines)</span></p>
+                    )}
+                    {(f.location?.methods || []).map((m, j) => (
+                      <div key={j}>
+                        <p className="muted">Change <code>{m.file}:{m.start_line}–{m.end_line}</code> — current code on those lines:</p>
+                        <pre>{m.source}</pre>
+                      </div>
+                    ))}
+                    {f.location && !f.location.class_file && (
+                      <p className="muted">Suggested class not found in this checkout — verify the name before editing.</p>
+                    )}
                     <p>{f.problem}</p>
                     <h3>Before</h3><pre>{f.before}</pre>
                     <h3>After</h3><pre>{f.after}</pre>
