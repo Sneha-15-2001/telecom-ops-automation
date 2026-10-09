@@ -25,9 +25,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [liveTickets, setLiveTickets] = useState(null)
   const [rca, setRca] = useState(null)
-  const [rcaLoading, setRcaLoading] = useState(false)
   const [fixes, setFixes] = useState(null)
-  const [fixesLoading, setFixesLoading] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('ai-theme') || 'light')
 
   useEffect(() => {
@@ -50,39 +48,6 @@ export default function App() {
     setTheme((t) => (t === 'light' ? 'dark' : 'light'))
   }
 
-  async function generateRca() {
-    setRcaLoading(true)
-    try {
-      const res = await fetch(`${API}/api/rca`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incident_text: text, mode: 'llm' }),
-      })
-      if (!res.ok) throw new Error(`backend ${res.status}`)
-      setRca(await res.json())
-    } catch (e) {
-      setError(`RCA failed: ${e.message}`)
-    } finally {
-      setRcaLoading(false)
-    }
-  }
-
-  async function proposeFixes() {
-    setFixesLoading(true)
-    try {
-      const body = JSON.stringify({ incident_text: text, mode: 'llm' })
-      const [d, c] = await Promise.all([
-        fetch(`${API}/api/datafix`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((r) => r.json()),
-        fetch(`${API}/api/codefix`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((r) => r.json()),
-      ])
-      setFixes({ data: d, code: c })
-    } catch (e) {
-      setError(`Fix proposal failed: ${e.message}`)
-    } finally {
-      setFixesLoading(false)
-    }
-  }
-
   function downloadRca() {
     if (!rca) return
     const blob = new Blob([rca.markdown], { type: 'text/markdown' })
@@ -94,19 +59,31 @@ export default function App() {
   }
 
   async function investigate() {
+    const query = text.trim()
+    if (!query || loading) return
     setLoading(true)
     setError('')
     setResult(null)
     setRca(null)
     setFixes(null)
+    const body = JSON.stringify({ incident_text: query, mode: 'llm' })
+    const post = (path) => fetch(`${API}${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    }).then((r) => {
+      if (!r.ok) throw new Error(`backend ${r.status}`)
+      return r.json()
+    })
     try {
-      const res = await fetch(`${API}/api/investigate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incident_text: text, mode: 'llm' }),
-      })
-      if (!res.ok) throw new Error(`backend ${res.status}`)
-      setResult(await res.json())
+      // One click runs everything: investigation + RCA + fix proposals.
+      const [inv, rcaRes, dataRes, codeRes] = await Promise.all([
+        post('/api/investigate'),
+        post('/api/rca'),
+        post('/api/datafix'),
+        post('/api/codefix'),
+      ])
+      setResult(inv)
+      setRca({ rca: rcaRes.rca, markdown: rcaRes.markdown })
+      setFixes({ data: dataRes, code: codeRes })
     } catch (e) {
       setError(`Investigator backend unreachable — is it running on :8090? (${e.message})`)
     } finally {
@@ -196,7 +173,11 @@ export default function App() {
             <div className="verdict-row">
               <div>
                 <div className="muted">Fix type</div>
-                <div className="fix-badge">{result.verdict.fix_type}</div>
+                <div className="fix-badge">{result.verdict?.fix_type || '…'}</div>
+              </div>
+              <div>
+                <div className="muted">When it happened</div>
+                <div className="fix-badge dim" style={{fontSize:'0.8rem'}}>{rca ? `${rca.rca.window.first || '?'} → ${rca.rca.window.last || '?'}` : '…'}</div>
               </div>
               <div>
                 <div className="muted">Root cause</div>
@@ -295,14 +276,9 @@ export default function App() {
 
           <section className="card">
             <h2>Root Cause Analysis</h2>
+            <p className="explainer">Written automatically with the investigation — impact, cause, timeline, recommendation.</p>
             <div className="btn-row">
-              <button className="btn" onClick={generateRca} disabled={rcaLoading}>
-                {rcaLoading ? 'Writing RCA…' : 'Generate RCA document'}
-              </button>
               {rca && <button className="btn small ghost" onClick={downloadRca}>Download .md</button>}
-              <button className="btn small ghost" onClick={proposeFixes} disabled={fixesLoading}>
-                {fixesLoading ? 'Proposing…' : 'Propose fixes'}
-              </button>
             </div>
             {rca && (
               <>
