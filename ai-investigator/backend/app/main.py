@@ -101,6 +101,24 @@ def live_incidents():
             "text": (f"Reservation {r.get('reservation_number')} stuck ACTIVE for order {r.get('order_id')}; "
                      f"resource {r.get('resource_number')} blocked."),
         })
+    for d in cands.get("duplicate_notifications", []):
+        tickets.append({
+            "id": f"LIVE-DUP-{d.get('order_id')}",
+            "title": f"Duplicate {d.get('template_code')} notifications for order {d.get('order_id')}",
+            "status": "Open", "priority": "P3", "reporter": "Ops watchlist",
+            "order": f"order {d.get('order_id')}", "error": f"{d.get('n')}× {d.get('template_code')} sent",
+            "text": (f"Duplicate {d.get('template_code')} notifications ({d.get('n')} rows) "
+                     f"for order {d.get('order_id')}."),
+        })
+    for v in cands.get("vanished_promos", []):
+        tickets.append({
+            "id": f"LIVE-{v.get('order_number')}",
+            "title": f"Promo vanished from order {v.get('order_number')}",
+            "status": "Open", "priority": "P3", "reporter": "Ops watchlist",
+            "order": v.get("order_number"), "error": "PROMOTION_APPLIED in history, promo now NULL",
+            "text": (f"Promo was applied to order {v.get('order_number')} then silently cleared "
+                     f"by a modify (order {v.get('id')})."),
+        })
     return {"tickets": tickets, "count": len(tickets)}
 
 

@@ -195,4 +195,20 @@ def recent_candidates() -> dict:
                 "WHERE r.status = 'ACTIVE' ORDER BY r.id DESC LIMIT 5", ())
     if r.get("rows"):
         out["open_reservations"] = r["rows"]
+    # Duplicates: same order + template notified more than once (no idempotency).
+    d = _select("notification",
+                "SELECT order_id, template_code, COUNT(*) AS n FROM notification "
+                "WHERE order_id IS NOT NULL AND template_code IS NOT NULL "
+                "GROUP BY order_id, template_code HAVING COUNT(*) > 1 "
+                "ORDER BY n DESC LIMIT 5", ())
+    if d.get("rows"):
+        out["duplicate_notifications"] = d["rows"]
+    # Vanished promos: PROMOTION_APPLIED in history but promo_code now NULL.
+    v = _select("order",
+                "SELECT o.id, o.order_number FROM telecom_order o "
+                "WHERE o.promo_code IS NULL AND EXISTS (SELECT 1 FROM order_history h "
+                "WHERE h.order_id = o.id AND h.event = 'PROMOTION_APPLIED') "
+                "ORDER BY o.id DESC LIMIT 5", ())
+    if v.get("rows"):
+        out["vanished_promos"] = v["rows"]
     return out
