@@ -240,6 +240,19 @@ pre {
 .fix { border: 1px solid var(--line); border-radius: 12px; padding: 0.8rem 1rem; margin-bottom: 0.9rem; }
 .fix h3 { margin-top: 0.4rem; }
 
+details.card summary.sum {
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.95rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+details.card summary.sum::before { content: '▸'; color: var(--red); }
+details.card[open] summary.sum::before { content: '▾'; }
+details.card summary.sum::-webkit-details-marker { display: none; }
+
 /* incident library */
 .ticket-grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 .ticket {

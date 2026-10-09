@@ -23,7 +23,6 @@ export default function App() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [useLlm, setUseLlm] = useState(() => localStorage.getItem('ai-mode') !== 'rules')
   const [liveTickets, setLiveTickets] = useState(null)
   const [rca, setRca] = useState(null)
   const [rcaLoading, setRcaLoading] = useState(false)
@@ -57,7 +56,7 @@ export default function App() {
       const res = await fetch(`${API}/api/rca`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incident_text: text, mode: useLlm ? 'llm' : 'rules' }),
+        body: JSON.stringify({ incident_text: text, mode: 'llm' }),
       })
       if (!res.ok) throw new Error(`backend ${res.status}`)
       setRca(await res.json())
@@ -71,7 +70,7 @@ export default function App() {
   async function proposeFixes() {
     setFixesLoading(true)
     try {
-      const body = JSON.stringify({ incident_text: text, mode: useLlm ? 'llm' : 'rules' })
+      const body = JSON.stringify({ incident_text: text, mode: 'llm' })
       const [d, c] = await Promise.all([
         fetch(`${API}/api/datafix`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((r) => r.json()),
         fetch(`${API}/api/codefix`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((r) => r.json()),
@@ -100,12 +99,11 @@ export default function App() {
     setResult(null)
     setRca(null)
     setFixes(null)
-    localStorage.setItem('ai-mode', useLlm ? 'llm' : 'rules')
     try {
       const res = await fetch(`${API}/api/investigate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incident_text: text, mode: useLlm ? 'llm' : 'rules' }),
+        body: JSON.stringify({ incident_text: text, mode: 'llm' }),
       })
       if (!res.ok) throw new Error(`backend ${res.status}`)
       setResult(await res.json())
@@ -131,13 +129,10 @@ export default function App() {
         <h2>Incident</h2>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="INC-10101 Order ORD-… stuck…" />
         <div className="btn-row mode-row">
-          <button className={`mode-toggle ${useLlm ? 'on' : 'off'}`} onClick={() => setUseLlm(!useLlm)} title="ON = LLM reasoning, OFF = rule-based only">
-            <span className="knob" />
-            <span className="mode-label">{useLlm ? 'LLM ON' : 'LLM OFF · rules'}</span>
-          </button>
           <button className="btn" onClick={investigate} disabled={loading || !text.trim()}>
             {loading ? 'Investigating…' : 'Investigate'}
           </button>
+          <span className="muted">AI reasoning over live evidence — no canned answers.</span>
         </div>
         <div className="btn-row">
           <span className="muted">Pick a ticket below — its text loads above, then Investigate.</span>
@@ -194,32 +189,35 @@ export default function App() {
       {result && !result.needs_info && (
         <>
           <section className="card verdict">
-            <h2>Verdict</h2>
-            <p className="explainer">Data = fix the stored information. Code = fix the program. One sentence, decided from evidence.</p>
+            <h2>Verdict — decided by the AI from live evidence</h2>
+            <p className="explainer">Data = fix the stored information. Code = fix the program. Nothing here is pre-written.</p>
+            {!result.verdict && <div className="alert error">{result.message || 'Add the LLM key to get a verdict.'}</div>}
+            {result.verdict && (
             <div className="verdict-row">
               <div>
                 <div className="muted">Fix type</div>
-                <div className="fix-badge">{result.llm?.enabled ? result.llm.analysis.fix_type : result.fix_hint}</div>
+                <div className="fix-badge">{result.verdict.fix_type}</div>
               </div>
               <div>
-                <div className="muted">Suspect service</div>
-                <div className="fix-badge dim">{result.suspect.service || 'unknown'}</div>
+                <div className="muted">Root cause</div>
+                <div className="fix-badge dim" style={{fontSize:'0.85rem'}}>{result.verdict.root_cause}</div>
               </div>
               <div>
                 <div className="muted">Confidence</div>
-                <div className="fix-badge dim">{result.llm?.enabled ? result.llm.analysis.confidence : result.suspect.confidence}</div>
+                <div className="fix-badge dim">{result.verdict.confidence}</div>
               </div>
             </div>
+            )}
           </section>
 
           <section className="card">
-            <div className="section-head"><h2>Hypothesis {result.has_error === false && <span className="pill amber">no error described — state-based only</span>}</h2></div>
-            <p className="explainer">Our best plain-words guess, and how sure we are. Details below show the proof.</p>
-            <p><strong>{result.hypothesis}</strong></p>
+            <div className="section-head"><h2>AI conclusion {result.has_error === false && <span className="pill amber">no error described — state-based only</span>}</h2></div>
+            <p className="explainer">In the model's own words, grounded in the journey and records below.</p>
+            {result.verdict
+              ? <p><strong>{result.verdict.summary}</strong></p>
+              : <p className="muted">No verdict yet — the model needs its key (see message above).</p>}
             <p className="muted">
-              Suspect: <Pill tone={toneFor(result.suspect.confidence === 'high' ? 'FAILED' : 'PENDING')}>{result.suspect.service || 'unknown'}</Pill>
-              {' '}· Signal: <code>{result.suspect.signal}</code>
-              {' '}· Confidence: {result.suspect.confidence}
+              Services holding failed rows: {(result.owner?.services || []).join(', ') || 'none'}
               {' '}· {result.log_stats.lines} log lines, {result.log_stats.direct_hits} direct hits
               {' '}· Correlations: {result.correlations.join(', ') || 'none'}
             </p>
@@ -232,7 +230,7 @@ export default function App() {
           </section>
 
           <section className="card">
-            <h2>LLM analysis {result.llm?.enabled ? <span className="pill green">{result.llm.model}</span> : <span className="pill">rule-based mode</span>}</h2>
+            <h2>Model details {result.llm?.enabled ? <span className="pill green">{result.llm.model}</span> : <span className="pill">no model connected</span>}</h2>
             {!result.llm?.enabled && <p className="muted">{result.llm?.reason} Add LLM_API_KEY to ai-investigator/backend/.env to enable.</p>}
             {result.llm?.enabled && result.llm.analysis && (
               <>

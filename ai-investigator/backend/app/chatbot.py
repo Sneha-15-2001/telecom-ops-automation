@@ -139,10 +139,9 @@ def chat(message: str, mode: str = "llm") -> dict:
         verdict = (f"{analysis.get('summary','')} Root cause: {analysis.get('root_cause','')} "
                    f"(confidence {analysis.get('confidence','?')}, fix {analysis.get('fix_type','?')}).")
     else:
-        verdict = inv.get("hypothesis", "")
-    s = inv.get("suspect", {})
-    return {"reply": f"{verdict} Suspect: {s.get('service')} ({s.get('signal')}).",
-            "action": "investigate", "data": inv}
+        verdict = (inv.get("verdict") or {}).get("summary") or \
+            "Evidence is collected below, but verdicts are drafted by the LLM — add the key."
+    return {"reply": verdict, "action": "investigate", "data": inv}
 
 
 def _help() -> dict:

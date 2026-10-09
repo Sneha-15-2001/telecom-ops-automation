@@ -23,10 +23,8 @@ inventory, provisioning, notification). You are given:
 - a correlated cross-service log journey (chronological),
 - the RAW correlated log lines themselves — grep these yourself, quote the
   exact lines that prove each link, and make YOUR OWN call on DATA vs CODE
-  from what the lines show (a rule-based hint is included only as a second
-  opinion; you may overrule it when the lines say otherwise),
-- read-only database evidence (current states),
-- a rule-based suspect hypothesis (a starting point, not gospel).
+  from what the lines show,
+- read-only database evidence (current states).
 
 Rules:
 1. Ground every claim in the supplied evidence. Never invent log lines, IDs, or rows.
@@ -46,7 +44,10 @@ Rules:
 7. evidence_refs must each QUOTE one raw log line (service + event + status)
    that proves that link — no uncited claims in the chain.
 
-Reply with JSON ONLY, exactly this shape:
+Reply with JSON ONLY, exactly this shape. Always provide BOTH data_fix_sql
+AND code_fix (use null for one side only with a one-line reason inside
+next_steps when it is genuinely inapplicable — e.g. a pure master-data state
+needs no code change, a pure program bug needs no data change):
 {
   "summary": "2-3 sentence incident summary",
   "root_cause": "single precise cause",

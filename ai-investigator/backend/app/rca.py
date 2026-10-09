@@ -17,48 +17,30 @@ def _first(d: dict, key: str):
 
 def _impact(inv: dict) -> str:
     orders = (inv.get("db_evidence") or {}).get("orders", [])
-    status = orders[0].get("status") if orders else None
-    svc = (inv.get("suspect") or {}).get("service") or "unidentified service"
-    mapping = {
-        "PAYMENT_PENDING": "customer charged (or attempting) but service not provisioned; order frozen mid-funnel",
-        "FAILED": "order/request dead; customer without service until re-driven",
-        "RETRYING": "order parked; invisible to queues except status filters",
-        "RESERVED": "sellable stock reduced; future orders may starve",
-    }
-    impact = mapping.get(str(status), "degraded order journey; customer-facing delay")
-    return f"{impact} (suspect: {svc})"
+    if not orders:
+        return "Impact follows from the verdict once the LLM has read the evidence."
+    o = orders[0]
+    return (f"Order {o.get('order_number')} sits in {o.get('status')} — "
+            f"see verdict for customer impact.")
 
 
 def _contributing(inv: dict) -> list:
-    out = []
-    journey = inv.get("journey", [])
-    events = [j["event"] for j in journey]
-    if "PAYMENT_RECORDED" in events and "PAYMENT_VALIDATED" not in events:
-        out.append("No callback/scheduler guarantees the validation step runs after a recorded payment.")
-    if "RESOURCE_RESERVED" in events and "RESOURCE_ALLOCATED" not in events:
-        out.append("No expiry sweeper or TTL enforcement frees stale reservations.")
-    if sum(1 for e in events if e == "NOTIFICATION_QUEUED") > 1:
-        out.append("Notify path has no idempotency key on (order, event); retries duplicate.")
-    if "MISSING_MSISDN" in str(inv.get("db_evidence", {})) or "MISSING_RESOURCE" in str(inv.get("db_evidence", {})):
-        out.append("Upstream flow allows provisioning requests without required identifiers.")
-    if not out:
-        out.append("Single-point failure with no contributing automation gaps identified.")
-    return out
+    analysis = ((inv.get("llm") or {}).get("analysis") or {}) if (inv.get("llm") or {}).get("enabled") else {}
+    refs = analysis.get("evidence_refs", []) if analysis else []
+    if refs:
+        return [f"Evidence link: {r}" for r in refs]
+    return ["LLM key required — contributing factors are drafted by the model from evidence."]
 
 
 def _recommendation(inv: dict) -> str:
-    hint = inv.get("fix_hint", "")
-    if hint.startswith("DATA"):
-        return ("First, unblock the affected rows with the temporary data correction under "
-                "'Propose fixes' below — read the SQL, check it, run it yourself; nothing here "
-                "runs automatically. Then fix the step or check that created the bad state, "
-                "so it cannot happen again.")
-    if hint.startswith("CODE"):
-        return ("A data patch only buys time for this one. If customers are waiting, use the "
-                "temporary workaround under 'Propose fixes' to unblock them, then schedule the "
-                "permanent code change described there and cover it with the listed tests.")
-    return ("First establish whether this is a data or code problem — use 'Propose fixes' "
-            "below and compare both proposals against the evidence above.")
+    analysis = ((inv.get("llm") or {}).get("analysis") or {}) if (inv.get("llm") or {}).get("enabled") else {}
+    steps = (analysis.get("next_steps") or []) if analysis else []
+    base = ("Open 'Propose fixes' for the temporary workaround and permanent code fix. ")
+    if steps:
+        base += "Suggested order: " + "; ".join(steps[:4]) + "."
+    else:
+        base += "Enable the LLM for tailored next steps."
+    return base
 
 
 def build_rca(inv: dict) -> dict:
@@ -75,14 +57,16 @@ def build_rca(inv: dict) -> dict:
     rca = {
         "incident": (entities.get("incident_id") or ["UNNUMBERED"])[0],
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "mode": inv.get("mode", "rules"),
-        "summary": (analysis or {}).get("summary") or inv.get("hypothesis", ""),
+        "mode": inv.get("mode", "llm"),
+        "summary": (analysis.get("summary") if analysis
+                    else (inv.get("verdict") or {}).get("summary")
+                    or "Evidence collected below; add the LLM key for the verdict narrative."),
         "impact": _impact(inv),
         "affected": {
             "order": order.get("order_number"),
             "order_status": order.get("status"),
             "customer": entities.get("customer_number", entities.get("customer_id", [])),
-            "service": (inv.get("suspect") or {}).get("service"),
+            "service": ", ".join((inv.get("owner") or {}).get("services", [])) or "see evidence",
         },
         "timeline": [
             {"time": j.get("time"), "service": j.get("service"),
@@ -95,12 +79,13 @@ def build_rca(inv: dict) -> dict:
             "log_lines": len(inv.get("log_lines", [])),
             "db_tables": sorted(db.keys()),
         },
-        "root_cause": (analysis or {}).get("root_cause")
-        or f"{(inv.get('suspect') or {}).get('signal')} in {(inv.get('suspect') or {}).get('service')}",
+        "root_cause": (analysis.get("root_cause") if analysis
+                       else "LLM key required — the model drafts the root cause from the evidence above."),
         "contributing_factors": _contributing(inv),
-        "confidence": (analysis or {}).get("confidence")
-        or (inv.get("suspect") or {}).get("confidence"),
-        "fix_type": (analysis or {}).get("fix_type") or inv.get("fix_hint", "UNKNOWN"),
+        "confidence": (analysis.get("confidence") if analysis
+                       else verdict.get("confidence", "none")),
+        "fix_type": (analysis.get("fix_type") if analysis
+                     else verdict.get("fix_type", "UNKNOWN")),
         "recommendation": _recommendation(inv),
     }
     if analysis:
