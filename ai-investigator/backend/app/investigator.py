@@ -57,13 +57,14 @@ def _hypothesis(entities: dict, suspect: dict, db: dict) -> str:
     if hints:
         joined = ", ".join(hints[:4])
     else:
-        joined = "no explicit error token in the ticket"
+        joined = "no clear error word in the ticket"
     orders = db.get("orders", [])
-    state = f"order state: {orders[0]['status']}" if orders else "order state unknown"
-    svc = suspect["service"] or "unidentified service"
-    return (f"Likely fault in {svc} ({suspect['signal']}; {state}). "
+    state = f"order is now: {orders[0]['status']}" if orders else "order state unknown"
+    svc = (suspect.get("service") or "unidentified service").replace("-service", "")
+    signal = suspect.get("signal") or "no clear signal"
+    return (f"Most likely trouble is in {svc}: {signal}. {state[0].upper() + state[1:]}. "
             f"Ticket hints: {joined}. "
-            f"Confidence {suspect['confidence']} — verify against the journey + DB below.")
+            f"Confidence {suspect.get('confidence', '?')} — please check the timeline and records below.")
 
 
 # Rough fix-type hint for rule mode (LLM refines it when enabled).

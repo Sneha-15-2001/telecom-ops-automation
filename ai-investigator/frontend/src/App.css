@@ -153,7 +153,92 @@ pre.logs { max-height: 420px; overflow-y: auto; white-space: pre-wrap; }
 .fix-badge.dim { background: #101828; }
 
 .logsrc { font-size: 0.78rem; }
-.logsrc li { margin-bottom: 0.2rem; }
+.logsrc li { margin-bottom: 0.2rem; word-break: break-word; }
+
+/* ---------- polish: motion, responsiveness, readability ---------- */
+
+.hero {
+  background: linear-gradient(105deg, #e40000 0%, #8f0000 65%, #3d0000 100%);
+  background-size: 180% 180%;
+  animation: heroDrift 14s ease-in-out infinite alternate;
+}
+
+@keyframes heroDrift {
+  from { background-position: 0% 40%; }
+  to { background-position: 100% 60%; }
+}
+
+.card {
+  animation: rise 0.45s ease both;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+.btn { transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease; }
+.btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(228, 0, 0, 0.3); }
+.btn:active:not(:disabled) { transform: none; }
+
+.ticket, .jira { transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+.ticket:hover, .jira:hover { transform: translateY(-2px); }
+
+.explainer {
+  margin: -0.3rem 0 0.8rem;
+  color: var(--soft);
+  font-size: 0.85rem;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.shimmer {
+  border-radius: 12px;
+  padding: 1rem;
+  background: linear-gradient(100deg, var(--line) 30%, var(--card) 50%, var(--line) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+  color: transparent;
+  user-select: none;
+}
+
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
+.table-scroll { overflow-x: auto; }
+.timeline li, .ticket-grid, .jira-grid { overflow-wrap: anywhere; }
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .page { padding: 1rem 0.85rem 3rem; }
+  .hero { padding: 1.4rem 1.2rem; }
+  .hero h1 { font-size: 1.35rem; }
+  .grid.two { grid-template-columns: 1fr; }
+  .ticket-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .jira-grid { grid-template-columns: 1fr; }
+  .verdict-row { gap: 0.8rem; }
+  .fix-badge { font-size: 0.9rem; }
+  .theme-toggle { top: 0.7rem; right: 0.85rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero, .card { animation: none; }
+  .btn:hover:not(:disabled), .ticket:hover, .jira:hover { transform: none; }
+}
+
+.fix { border: 1px solid var(--line); border-radius: 12px; padding: 0.8rem 1rem; margin-bottom: 0.9rem; }
+.fix h3 { margin-top: 0.4rem; }
 
 /* incident library */
 .ticket-grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }

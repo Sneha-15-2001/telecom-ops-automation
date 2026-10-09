@@ -75,6 +75,8 @@ export default function App() {
   const [useLlm, setUseLlm] = useState(() => localStorage.getItem('ai-mode') !== 'rules')
   const [rca, setRca] = useState(null)
   const [rcaLoading, setRcaLoading] = useState(false)
+  const [fixes, setFixes] = useState(null)
+  const [fixesLoading, setFixesLoading] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('ai-theme') || 'light')
 
   useEffect(() => {
@@ -103,6 +105,22 @@ export default function App() {
     }
   }
 
+  async function proposeFixes() {
+    setFixesLoading(true)
+    try {
+      const body = JSON.stringify({ incident_text: text, mode: useLlm ? 'llm' : 'rules' })
+      const [d, c] = await Promise.all([
+        fetch(`${API}/api/datafix`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((r) => r.json()),
+        fetch(`${API}/api/codefix`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((r) => r.json()),
+      ])
+      setFixes({ data: d, code: c })
+    } catch (e) {
+      setError(`Fix proposal failed: ${e.message}`)
+    } finally {
+      setFixesLoading(false)
+    }
+  }
+
   function downloadRca() {
     if (!rca) return
     const blob = new Blob([rca.markdown], { type: 'text/markdown' })
@@ -118,6 +136,7 @@ export default function App() {
     setError('')
     setResult(null)
     setRca(null)
+    setFixes(null)
     localStorage.setItem('ai-mode', useLlm ? 'llm' : 'rules')
     try {
       const res = await fetch(`${API}/api/investigate`, {
@@ -180,6 +199,12 @@ export default function App() {
         </div>
       </section>
 
+      {loading && (
+        <section className="card" aria-busy="true">
+          <div className="shimmer">Reading logs, checking records, connecting the dots…</div>
+        </section>
+      )}
+
       {result && result.needs_info && (
         <section className="card">
           <h2>Need more details 🔍</h2>
@@ -207,6 +232,7 @@ export default function App() {
         <>
           <section className="card verdict">
             <h2>Verdict</h2>
+            <p className="explainer">Data = fix the stored information. Code = fix the program. One sentence, decided from evidence.</p>
             <div className="verdict-row">
               <div>
                 <div className="muted">Fix type</div>
@@ -224,7 +250,8 @@ export default function App() {
           </section>
 
           <section className="card">
-            <h2>Hypothesis {result.has_error === false && <span className="pill amber">no error described — state-based only</span>}</h2>
+            <div className="section-head"><h2>Hypothesis {result.has_error === false && <span className="pill amber">no error described — state-based only</span>}</h2></div>
+            <p className="explainer">Our best plain-words guess, and how sure we are. Details below show the proof.</p>
             <p><strong>{result.hypothesis}</strong></p>
             <p className="muted">
               Suspect: <Pill tone={toneFor(result.suspect.confidence === 'high' ? 'FAILED' : 'PENDING')}>{result.suspect.service || 'unknown'}</Pill>
@@ -275,10 +302,12 @@ export default function App() {
           <div className="grid two">
             <section className="card">
               <h2>Extracted entities</h2>
+            <p className="explainer">Names and numbers pulled out of your ticket — everything below is traced from these.</p>
               {Object.entries(result.entities).map(([k, v]) => (
                 <p key={k}><code>{k}</code>: {v.join(', ')}</p>
               ))}
               <h2>Database evidence (SELECT only)</h2>
+              <p className="explainer">Current stored state for those IDs. Read fresh now — nothing was changed.</p>
               {Object.entries(result.db_evidence).map(([k, rows]) => (
                 <div key={k}>
                   <h3>{k}</h3>
@@ -288,6 +317,7 @@ export default function App() {
             </section>
             <section className="card">
               <h2>Service journey</h2>
+              <p className="explainer">Every step your request took, in time order, across all five services.</p>
               <ul className="timeline">
                 {result.journey.map((j, i) => (
                   <li key={i}><strong>{j.service}</strong> · {j.event} <Pill tone={toneFor(j.status)}>{j.status}</Pill><br /><span className="t">{j.time}</span></li>
@@ -298,6 +328,7 @@ export default function App() {
 
           <section className="card">
             <h2>Relevant log lines ({result.log_lines.length})</h2>
+            <p className="explainer">The exact lines the verdict is built on — this is the proof, not decoration.</p>
             <pre className="logs">{result.log_lines.map((l) => `[${l.service}] ${l.line}`).join('\n')}</pre>
           </section>
 
@@ -308,6 +339,9 @@ export default function App() {
                 {rcaLoading ? 'Writing RCA…' : 'Generate RCA document'}
               </button>
               {rca && <button className="btn small ghost" onClick={downloadRca}>Download .md</button>}
+              <button className="btn small ghost" onClick={proposeFixes} disabled={fixesLoading}>
+                {fixesLoading ? 'Proposing…' : 'Propose fixes'}
+              </button>
             </div>
             {rca && (
               <>
@@ -329,6 +363,42 @@ export default function App() {
               </>
             )}
           </section>
+
+          {fixes && (
+            <>
+              <section className="card">
+                <h2>Temporary data fix <span className="pill amber">proposal only — human approval required</span></h2>
+                <p className="explainer">Unblocks the customer <em>right now</em>. Copy, check, approve — the tool itself can never run these.</p>
+                {fixes.data.fixes.map((f, i) => (
+                  <div key={i} className="fix">
+                    <h3>{f.kind.toUpperCase()} · {f.title}</h3>
+                    <p>{f.why}</p>
+                    {f.sql.map((s, j) => <pre key={j}>{s}</pre>)}
+                    {f.operation && <p>Operation: <code>{f.operation}</code></p>}
+                    <p className="muted">Validate: {f.validation}<br />Rollback: {f.rollback}</p>
+                  </div>
+                ))}
+                {fixes.data.llm_sql && (<><h3>LLM-drafted SQL</h3><pre>{fixes.data.llm_sql}</pre></>)}
+              </section>
+              <section className="card">
+                <h2>Permanent code fix <span className="pill navy">proposal only — review + tests + deploy</span></h2>
+                <p className="explainer">Stops it happening again. A developer reviews, tests and ships this — never the AI.</p>
+                {fixes.code.fixes.map((f, i) => (
+                  <div key={i} className="fix">
+                    <h3>{f.title}</h3>
+                    <p className="muted">{f.service} · {f.area}</p>
+                    <p>{f.problem}</p>
+                    <h3>Before</h3><pre>{f.before}</pre>
+                    <h3>After</h3><pre>{f.after}</pre>
+                    <p><strong>Tests:</strong></p>
+                    <ul>{f.tests.map((t, j) => <li key={j}>{t}</li>)}</ul>
+                    <p className="muted"><strong>Risks:</strong> {f.risks}<br /><strong>Deploy:</strong> {f.deploy_notes}</p>
+                  </div>
+                ))}
+                {fixes.code.llm_code_fix && (<><h3>LLM-drafted fix</h3><pre>{JSON.stringify(fixes.code.llm_code_fix, null, 1)}</pre></>)}
+              </section>
+            </>
+          )}
         </>
       )}
     </main>
