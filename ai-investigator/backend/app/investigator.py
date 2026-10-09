@@ -47,9 +47,17 @@ def _suspect(entities: dict, journey: list, incident_text: str = "") -> dict:
         if started in events and expected and expected not in events:
             return {"service": svc, "signal": f"{started} without {expected}", "confidence": "medium",
                     "hypothesis": why}
+    # Silent behavior change: promo applied, then items replaced (promo cleared unlogged).
+    if "PROMOTION_APPLIED" in events and "ORDER_MODIFIED" in events:
+        if events.index("PROMOTION_APPLIED") < events.index("ORDER_MODIFIED"):
+            return {"service": "order-service",
+                    "signal": "PROMOTION_APPLIED then ORDER_MODIFIED (promo silently cleared)",
+                    "confidence": "medium",
+                    "hypothesis": "promotion applied, then items replaced and the discount vanished without an audit event"}
     if journey:
-        return {"service": journey[-1]["service"],
-                "signal": f"last observed: {journey[-1]['event']}",
+        scoped = pool or journey
+        return {"service": scoped[-1]["service"],
+                "signal": f"last observed: {scoped[-1]['event']}",
                 "confidence": "low"}
     return {"service": None, "signal": "no correlated log lines found", "confidence": "none"}
 
@@ -84,6 +92,8 @@ def _fix_hint(suspect: dict, entities: dict, db: dict) -> str:
     # CODE: structural defects visible in signal/keywords first.
     if any(s in text for s in ("DUPLICATE", "N+1", "ROLLBACK")):
         return CODE
+    if "SILENTLY CLEARED" in text or ("PROMOTION" in text and "ORDER_MODIFIED" in text):
+        return CODE + " — behavior change with no audit event"
     if "LEAK" in text or ("EXPIRED" in text and ("RESERV" in text or "HOLD" in text)):
         return CODE + " — leaked/expired hold never compensated"
     if "WITHOUT RESOURCE_ALLOCATED" in text or "WITHOUT CONFIRM" in text:
