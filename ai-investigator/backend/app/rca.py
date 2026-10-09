@@ -49,12 +49,16 @@ def _contributing(inv: dict) -> list:
 def _recommendation(inv: dict) -> str:
     hint = inv.get("fix_hint", "")
     if hint.startswith("DATA"):
-        return ("Temporary data fix first (validated SQL, human-approved), then harden the "
-                "flow so the state cannot recur. See fix_hint / Phase 16-17 output.")
+        return ("First, unblock the affected rows with the temporary data correction under "
+                "'Propose fixes' below — read the SQL, check it, run it yourself; nothing here "
+                "runs automatically. Then fix the step or check that created the bad state, "
+                "so it cannot happen again.")
     if hint.startswith("CODE"):
-        return ("Permanent code fix required (see Phase 17 output); use a data fix only to "
-                "unblock the affected rows meanwhile.")
-    return "Confirm the fix type (enable LLM mode) before choosing data vs code remediation."
+        return ("A data patch only buys time for this one. If customers are waiting, use the "
+                "temporary workaround under 'Propose fixes' to unblock them, then schedule the "
+                "permanent code change described there and cover it with the listed tests.")
+    return ("First establish whether this is a data or code problem — use 'Propose fixes' "
+            "below and compare both proposals against the evidence above.")
 
 
 def build_rca(inv: dict) -> dict:
