@@ -35,7 +35,8 @@ def _contributing(inv: dict) -> list:
 def _recommendation(inv: dict) -> str:
     analysis = ((inv.get("llm") or {}).get("analysis") or {}) if (inv.get("llm") or {}).get("enabled") else {}
     steps = (analysis.get("next_steps") or []) if analysis else []
-    base = ("Open 'Propose fixes' for the temporary workaround and permanent code fix. ")
+    base = ("The Temporary workaround and Permanent code fix sections below load "
+            "automatically with this RCA — review the workaround first, then the code fix. ")
     if steps:
         base += "Suggested order: " + "; ".join(steps[:4]) + "."
     else:
