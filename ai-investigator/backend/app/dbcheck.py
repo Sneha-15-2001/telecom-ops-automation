@@ -82,7 +82,9 @@ def collect(entities: dict, log_result: dict) -> dict:
         if pr.get("rows"):
             evidence.setdefault("provisioning", []).extend(pr["rows"])
         rv = _select("inventory",
-                     "SELECT reservation_number, status FROM resource_reservation WHERE order_id = %s", (int(oid),))
+                     "SELECT r.reservation_number, r.status, res.resource_number, res.status AS resource_status "
+                     "FROM resource_reservation r JOIN inventory_resource res ON res.id = r.resource_id "
+                     "WHERE r.order_id = %s", (int(oid),))
         if rv.get("rows"):
             evidence.setdefault("reservations", []).extend(rv["rows"])
         nt = _select("notification",
@@ -131,13 +133,28 @@ def collect(entities: dict, log_result: dict) -> dict:
 
 
 def resolve_order_ids(entities: dict) -> dict:
-    """Map extracted order_numbers to numeric ids BEFORE log search, so
-    orderId=N log needles match. Returns the same dict (mutated)."""
+    """Map every extracted number to numeric order ids BEFORE log search, since
+    log lines carry orderId=N (numeric) but almost never the PRV-/RSV-/NTF- codes."""
     ids = set(entities.get("order_id", []))
     for num in entities.get("order_number", []):
         r = _select("order", "SELECT id FROM telecom_order WHERE order_number = %s", (num,))
         for row in r.get("rows", []):
             ids.add(str(row["id"]))
+    for num in entities.get("request_number", []):
+        r = _select("provisioning", "SELECT order_id FROM provisioning_request WHERE request_number = %s", (num,))
+        for row in r.get("rows", []):
+            if row.get("order_id") is not None:
+                ids.add(str(row["order_id"]))
+    for num in entities.get("reservation_number", []):
+        r = _select("inventory", "SELECT order_id FROM resource_reservation WHERE reservation_number = %s", (num,))
+        for row in r.get("rows", []):
+            if row.get("order_id") is not None:
+                ids.add(str(row["order_id"]))
+    for num in entities.get("notification_number", []):
+        r = _select("notification", "SELECT order_id FROM notification WHERE notification_number = %s", (num,))
+        for row in r.get("rows", []):
+            if row.get("order_id") is not None:
+                ids.add(str(row["order_id"]))
     if ids:
         entities["order_id"] = sorted(ids)
     return entities

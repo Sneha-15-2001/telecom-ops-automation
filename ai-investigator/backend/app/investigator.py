@@ -12,7 +12,7 @@ from . import dbcheck, extractor, llmreason, logsearch
 FAILED_MARKERS = ("FAILED",)
 
 
-def _suspect(entities: dict, journey: list) -> dict:
+def _suspect(entities: dict, journey: list, incident_text: str = "") -> dict:
     # Most specific identifier in the ticket sets the focus service.
     focus = None
     if entities.get("request_number"):
@@ -20,6 +20,8 @@ def _suspect(entities: dict, journey: list) -> dict:
     elif entities.get("reservation_number") or entities.get("resource_number"):
         focus = "inventory-service"
     elif entities.get("notification_number"):
+        focus = "notification-service"
+    elif any(w in incident_text.upper() for w in ("SMS", "NOTIFICATION", "NOTIFIED")):
         focus = "notification-service"
     pool = [j for j in journey if j["service"] == focus] if focus else journey
 
@@ -141,7 +143,7 @@ def investigate(incident_text: str, mode: str = "llm") -> dict:
                     or str(r.get("last_error", "")) for r in rows if isinstance(r, dict)):
                 has_error = True
                 break
-    suspect = _suspect(entities, logs["journey"])
+    suspect = _suspect(entities, logs["journey"], incident_text)
     result = {
         "incident_text": incident_text,
         "entities": entities,
