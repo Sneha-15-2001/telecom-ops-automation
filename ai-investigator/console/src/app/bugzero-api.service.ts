@@ -67,6 +67,7 @@ export interface Investigation {
   candidates?: any[];
   jira_source?: any;
   investigation_ref?: string;
+  verification?: Verification | null;
   persisted?: boolean;
   warnings?: string[];
 }
@@ -107,6 +108,13 @@ export interface JiraIssue {
   reporter: string;
   created: string;
   labels: string[];
+}
+
+export interface Verification {
+  checked: number;
+  verdict: 'CONFIRMED' | 'CONTRADICTED' | 'UNVERIFIABLE';
+  summary: string;
+  claims: { claim: string; verdict: string; detail: string }[];
 }
 
 export interface RcaRemediation {

@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BugZeroApi, HandoffResult, HealthReport, Investigation, QueuedIssue, RcaDoc, RcaRemediation } from './bugzero-api.service';
+import { BugZeroApi, HandoffResult, HealthReport, Investigation, QueuedIssue, RcaDoc, RcaRemediation, Verification } from './bugzero-api.service';
 import { PipelineTimeline } from './pipeline-timeline.component';
 import { HandoffPanel } from './handoff-panel.component';
 
@@ -50,6 +50,7 @@ export class Investigator {
   // --- state --------------------------------------------------------------
   busy = signal<'jira' | 'text' | null>(null);
   rca = signal<RcaDoc | null>(null);
+  verification = signal<Verification | null>(null);
   rcaBusy = signal(false);
   investigation = signal<Investigation | null>(null);
   health = signal<HealthReport | null>(null);
@@ -176,6 +177,11 @@ export class Investigator {
   onHandoffDone(result: HandoffResult | null): void {
     this.handoffResult.set(result);
     this.refreshHealth();
+  }
+
+  /** Stage 0 result, set from the investigation response. */
+  verificationFrom(inv: Investigation | null): void {
+    this.verification.set((inv as any)?.verification ?? null);
   }
 
   remediation = computed<RcaRemediation | null>(() => {

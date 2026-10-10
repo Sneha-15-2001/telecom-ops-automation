@@ -79,3 +79,15 @@
 details { margin-top: .8rem; }
 details summary { cursor: pointer; font-size: .82rem; color: var(--bz-muted); }
 details[open] summary { margin-bottom: .4rem; }
+
+/* --- stage 0: ticket verification ---------------------------------------- */
+.verify { border-left-width: 3px; }
+.verify[data-verdict='CONFIRMED']     { border-left-color: var(--bz-ok); }
+.verify[data-verdict='CONTRADICTED']  { border-left-color: var(--bz-bad); }
+.verify[data-verdict='UNVERIFIABLE']  { border-left-color: var(--bz-warn); }
+.verify .vsum { margin: 0 0 .7rem; font-size: .86rem; }
+.verify .vtag {
+  font-size: .66rem; font-weight: 700; letter-spacing: .04em;
+  padding: .12rem .4rem; border-radius: 4px; white-space: nowrap;
+}
+.verify td:nth-child(2) .vtag[data-v='CONFIRMED']    { color: var(--bz-ok); }

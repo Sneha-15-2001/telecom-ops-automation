@@ -232,6 +232,32 @@ def build_rca(inv: dict, code_fix: dict = None) -> dict:
             "before": code_fix.get("before"),
             "after": code_fix.get("after"),
         }
+
+    # Verification is applied AFTER the fix is attached, so it can withdraw it.
+    # Proposing an edit to a system that is demonstrably healthy is the worst
+    # outcome this tool can produce.
+    ver = inv.get("verification") or {}
+    if ver.get("checked"):
+        rca["verification"] = ver
+        if ver.get("verdict") == "CONTRADICTED":
+            rca.pop("code_fix", None)
+            rca["recommendation"] = (
+                "Do not change code on the strength of this ticket. The running system "
+                "disagrees with it — re-confirm the outage before investigating further.")
+            rca["remediation"] = {
+                "kind": "stale-ticket", "owner": "reporter",
+                "where": None,
+                "steps": [
+                    "The ticket describes an outage that is not happening right now.",
+                    "Confirm with the reporter whether the incident is already resolved "
+                    "or was never real.",
+                    "If it was real, check whether the logs have rotated past the evidence.",
+                    "Re-run once the fault is present so the investigation has something "
+                    "to read.",
+                ],
+                "confidence": "high",
+                "note": "No code change proposed — the system is behaving.",
+            }
     if analysis:
         rca["llm_narrative"] = {
             "evidence_refs": analysis.get("evidence_refs", []),
@@ -272,6 +298,15 @@ def to_markdown(rca: dict) -> str:
 
     # The action plan and the proposed change are the parts anyone actually
     # works from, so they are not buried under the LLM appendix.
+    ver = rca.get("verification") or {}
+    if ver.get("checked"):
+        lines += ["## Ticket verified against the live system", "",
+                  f"**Result: {ver.get('verdict')}** — {ver.get('summary')}", "",
+                  "| Claim | Verdict | Observed |", "|---|---|---|"]
+        for c in ver.get("claims", []):
+            lines.append(f"| {c.get('claim')} | **{c.get('verdict')}** | {c.get('detail')} |")
+        lines.append("")
+
     rem = rca.get("remediation") or {}
     if rem:
         lines += ["## What has to be done", ""]

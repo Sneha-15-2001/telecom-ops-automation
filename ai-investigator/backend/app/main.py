@@ -62,6 +62,18 @@ class FollowupRequest(BaseModel):
     jira_key: str = None
 
 
+@app.post("/api/verify")
+def verify_claims(req: InvestigateRequest):
+    """Stage 0 — check the ticket against the running system before diagnosing.
+
+    A ticket is a claim. This reports what it said against what was actually
+    observed, so a stale or fictional ticket is caught before it produces a
+    confident-sounding RCA about an outage that is not happening.
+    """
+    from . import verifier
+    return verifier.verify(req.incident_text)
+
+
 def _stages(inv: dict) -> list:
     """Reconstruct the five-slide pipeline from a finished investigation.
 
@@ -96,7 +108,16 @@ def _stages(inv: dict) -> list:
                   if skipped else
                   (source.get("mode") or "unknown") + f" — {log_lines} correlated lines")
 
-    return [
+    # Stage 0: did we confirm the ticket is describing something real?
+    ver = inv.get("verification") or {}
+    vverdict = ver.get("verdict")
+    stages = []
+    if ver:
+        mark = {"CONFIRMED": "ok", "CONTRADICTED": "fail", "UNVERIFIABLE": "warn"}.get(vverdict, "warn")
+        stages.append(stage(0, "Verify ticket against live system",
+                            ver.get("summary", ""), mark, ver.get("checked")))
+
+    return stages + [
         stage(1, "Jira issue input",
               (entities.get("incident_id") or ["free-text ticket"])[0],
               "warn" if not id_count else "ok", id_count),
@@ -133,7 +154,10 @@ def health():
 @app.post("/api/investigate")
 def investigate(req: InvestigateRequest):
     mode = req.mode if req.mode in ("llm", "rules") else "llm"
+    from . import verifier
+    verification = verifier.verify(req.incident_text)
     inv = investigator.investigate(req.incident_text, mode=mode)
+    inv["verification"] = verification
     inv["stages"] = _stages(inv)
     saved = store.save_investigation(inv)
     inv["investigation_ref"] = saved.get("reference")
@@ -154,15 +178,21 @@ def make_rca(req: InvestigateRequest):
     documented the problem and then stopped without saying what to do.
     """
     mode = req.mode if req.mode in ("llm", "rules") else "llm"
+    from . import verifier
+    verification = verifier.verify(req.incident_text)
     inv = investigator.investigate(req.incident_text, mode=mode)
+    inv["verification"] = verification
     inv["stages"] = _stages(inv)
     fix = handoff._code_fix_block(inv)
     doc = rca_builder.build_rca(inv, fix)
     saved = store.save_investigation(inv, source_issue=None)
+    # Read has_fix from the document, not from the draft: build_rca discards the
+    # fix when verification contradicts the ticket, and the response must agree.
     return {"rca": doc, "markdown": rca_builder.to_markdown(doc),
             "investigation": inv,
             "investigation_ref": saved.get("reference"),
-            "has_fix": bool(fix),
+            "has_fix": "code_fix" in doc,
+            "verification": doc.get("verification"),
             "remediation": doc.get("remediation")}
 
 

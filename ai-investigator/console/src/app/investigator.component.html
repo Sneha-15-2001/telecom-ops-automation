@@ -79,6 +79,25 @@
   </section>
 
   @if (investigation(); as inv) {
+    @if (verification(); as v) {
+      <section class="card verify" [attr.data-verdict]="v.verdict">
+        <h3>0 · Ticket verified against the live system</h3>
+        <p class="vsum">{{ v.summary }}</p>
+        <table class="grid">
+          <thead><tr><th>Claim</th><th>Verdict</th><th>Observed</th></tr></thead>
+          <tbody>
+            @for (c of v.claims; track c.claim) {
+              <tr>
+                <td>{{ c.claim }}</td>
+                <td><span class="vtag" [attr.data-v]="c.verdict">{{ c.verdict }}</span></td>
+                <td class="small">{{ c.detail }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    }
+
     <!-- stages 2-5 -->
     <section class="card">
       <h3>2–5 · Investigation pipeline</h3>
