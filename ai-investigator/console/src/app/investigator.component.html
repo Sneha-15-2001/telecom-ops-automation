@@ -140,7 +140,49 @@
       @case ('rca') {
         <section class="card">
           <h3>Root cause analysis</h3>
-          <p class="muted small">Preview the handoff below to generate the downloadable RCA.</p>
+          @if (rcaBusy()) {
+            <p class="muted">Building the RCA from the collected evidence…</p>
+          } @else if (!rca()) {
+            <p class="muted">Generate the RCA to get the full document, the proposed change and a step-by-step action plan.</p>
+            <button class="btn" (click)="generateRca()" [disabled]="busy() !== null">Generate RCA</button>
+          } @else {
+            @if (remediation(); as rem) {
+              <div class="remediation" [attr.data-kind]="rem.kind">
+                <div class="head">
+                  <strong>What has to be done</strong>
+                  <span class="tag">{{ rem.kind }}</span>
+                  @if (rem.owner) { <span class="chip">owner: {{ rem.owner }}</span> }
+                </div>
+                @if (rem.where) {
+                  <p class="where mono">{{ rem.where }}</p>
+                }
+                <ol>
+                  @for (step of rem.steps; track $index) {
+                    <li>{{ step }}</li>
+                  }
+                </ol>
+                @if (rem.note) { <p class="note">{{ rem.note }}</p> }
+              </div>
+            }
+            @if (rca()!.code_fix; as fix) {
+              <div class="fixblock">
+                <h4>
+                  Proposed change — {{ fix.class_name }}.{{ fix.method }}()
+                  <span class="chip" [class.ok]="fix.verified" [class.bad]="!fix.verified">
+                    {{ fix.verified ? 'verified in source' : 'not verified' }}
+                  </span>
+                </h4>
+                <h5>Current code (verbatim from source)</h5>
+                <pre class="log">{{ fix.before }}</pre>
+                <h5>Suggested replacement</h5>
+                <pre class="log">{{ fix.after }}</pre>
+              </div>
+            }
+            <details>
+              <summary>Full RCA document ({{ rca()!.markdown.length }} chars)</summary>
+              <pre class="log">{{ rca()!.markdown }}</pre>
+            </details>
+          }
         </section>
       }
     }

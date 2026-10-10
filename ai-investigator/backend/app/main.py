@@ -147,12 +147,23 @@ def investigate(req: InvestigateRequest):
 
 @app.post("/api/rca")
 def make_rca(req: InvestigateRequest):
-    """Full pipeline + structured RCA document (JSON + markdown)."""
+    """Full pipeline + structured RCA document (JSON + markdown).
+
+    Carries the located code fix and an explicit remediation plan. Previously the
+    fix only appeared in the handoff output, so an RCA for a platform failure
+    documented the problem and then stopped without saying what to do.
+    """
     mode = req.mode if req.mode in ("llm", "rules") else "llm"
     inv = investigator.investigate(req.incident_text, mode=mode)
-    doc = rca_builder.build_rca(inv)
+    inv["stages"] = _stages(inv)
+    fix = handoff._code_fix_block(inv)
+    doc = rca_builder.build_rca(inv, fix)
+    saved = store.save_investigation(inv, source_issue=None)
     return {"rca": doc, "markdown": rca_builder.to_markdown(doc),
-            "investigation": inv}
+            "investigation": inv,
+            "investigation_ref": saved.get("reference"),
+            "has_fix": bool(fix),
+            "remediation": doc.get("remediation")}
 
 
 @app.get("/api/catalog")

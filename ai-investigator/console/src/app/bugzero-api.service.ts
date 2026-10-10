@@ -95,6 +95,7 @@ export interface HandoffResult {
   dry_run?: boolean;
   note?: string;
   rca_markdown?: string;
+  remediation?: RcaRemediation | null;
   safety: string;
 }
 
@@ -106,6 +107,31 @@ export interface JiraIssue {
   reporter: string;
   created: string;
   labels: string[];
+}
+
+export interface RcaRemediation {
+  kind: string;
+  owner?: string | null;
+  where?: string | null;
+  steps: string[];
+  note?: string;
+  confidence?: string;
+}
+
+export interface RcaDoc {
+  incident: string;
+  summary: string;
+  impact: string;
+  root_cause: string;
+  confidence: string;
+  fix_type: string;
+  markdown: string;
+  remediation?: RcaRemediation | null;
+  code_fix?: {
+    service?: string; class_name?: string; method?: string;
+    verified?: boolean; before?: string; after?: string;
+    location?: { methods?: Array<{ file: string; start_line: number; end_line: number }> };
+  } | null;
 }
 
 export interface HealthReport {

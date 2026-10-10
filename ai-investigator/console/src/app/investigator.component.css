@@ -52,3 +52,30 @@
   font-size: .62rem; text-transform: uppercase; letter-spacing: .05em;
   color: #a371f7; border: 1px solid #a371f7; border-radius: 4px; padding: .02rem .28rem;
 }
+
+/* --- RCA: the action plan is the point of this section ------------------ */
+.remediation {
+  border: 1px solid var(--bz-line); border-left-width: 3px;
+  border-radius: 8px; padding: .8rem .9rem; margin-bottom: 1rem;
+  background: var(--bz-panel);
+}
+.remediation[data-kind='code-defect']       { border-left-color: var(--bz-accent); }
+.remediation[data-kind='not-a-defect']      { border-left-color: var(--bz-ok); }
+.remediation[data-kind='investigate-further'] { border-left-color: var(--bz-warn); }
+.remediation .head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.remediation .tag {
+  font-size: .66rem; text-transform: uppercase; letter-spacing: .05em;
+  padding: .12rem .4rem; border-radius: 4px;
+  background: var(--bz-chip); color: var(--bz-muted);
+}
+.remediation .where { font-size: .74rem; color: var(--bz-accent); margin: 0 0 .5rem; overflow-wrap: anywhere; }
+.remediation ol { margin: 0; padding-left: 1.2rem; font-size: .84rem; line-height: 1.6; }
+.remediation li { margin-bottom: .3rem; }
+.remediation .note { margin: .6rem 0 0; font-size: .74rem; color: var(--bz-muted); font-style: italic; }
+
+.fixblock h4 { margin: 0 0 .5rem; font-size: .86rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.fixblock h5 { margin: .7rem 0 .25rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--bz-muted); }
+
+details { margin-top: .8rem; }
+details summary { cursor: pointer; font-size: .82rem; color: var(--bz-muted); }
+details[open] summary { margin-bottom: .4rem; }

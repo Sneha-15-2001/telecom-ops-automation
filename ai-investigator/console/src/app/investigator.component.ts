@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BugZeroApi, HandoffResult, HealthReport, Investigation, QueuedIssue } from './bugzero-api.service';
+import { BugZeroApi, HandoffResult, HealthReport, Investigation, QueuedIssue, RcaDoc, RcaRemediation } from './bugzero-api.service';
 import { PipelineTimeline } from './pipeline-timeline.component';
 import { HandoffPanel } from './handoff-panel.component';
 
@@ -49,6 +49,8 @@ export class Investigator {
 
   // --- state --------------------------------------------------------------
   busy = signal<'jira' | 'text' | null>(null);
+  rca = signal<RcaDoc | null>(null);
+  rcaBusy = signal(false);
   investigation = signal<Investigation | null>(null);
   health = signal<HealthReport | null>(null);
   section = signal<'evidence' | 'code' | 'rca'>('evidence');
@@ -174,6 +176,28 @@ export class Investigator {
   onHandoffDone(result: HandoffResult | null): void {
     this.handoffResult.set(result);
     this.refreshHealth();
+  }
+
+  remediation = computed<RcaRemediation | null>(() => {
+    return this.rca()?.remediation ?? this.handoffResult()?.remediation ?? null;
+  });
+
+  /** Build the RCA document, the proposed change and the action plan. */
+  generateRca(): void {
+    const inv = this.investigation();
+    if (!inv) return;
+    this.rcaBusy.set(true);
+    this.rca.set(null);
+    this.api.rca(inv.incident_text).subscribe((r) => {
+      this.rcaBusy.set(false);
+      if (r?.rca) {
+        this.rca.set({
+          ...r.rca,
+          markdown: r.markdown ?? '',
+          remediation: r.remediation ?? null,
+        });
+      }
+    });
   }
 
   sourceIssueLabel(): string | null {
