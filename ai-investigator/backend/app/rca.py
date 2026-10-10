@@ -54,6 +54,7 @@ def build_rca(inv: dict) -> dict:
     times = [j["time"] for j in journey if j.get("time")]
     llm = inv.get("llm") or {}
     analysis = llm.get("analysis") if llm.get("enabled") else None
+    verdict = inv.get("verdict") or {}
 
     rca = {
         "incident": (entities.get("incident_id") or ["UNNUMBERED"])[0],

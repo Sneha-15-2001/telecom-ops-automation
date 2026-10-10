@@ -90,12 +90,26 @@ needs no code change, a pure program bug needs no data change):
 class_name/method rule: the request also carries a code catalog — every REAL
 class and its REAL public methods per service. Copy class_name AND method
 EXACTLY from that catalog (never invent names like queueNotification or
-createNotification). Your service MUST be the owning service named in the
-matching pattern or failed row — never a bystander service that merely appears
-in the journey. before/after MUST be Java code blocks of at least 3 lines each,
-written in this codebase's Spring/JPA style (@Service, repositories,
-@Transactional). A prose sentence as before/after is a failed answer — write
-compilable-looking code."""
+validatePayment). Your service MUST be the owning service named in the matching
+pattern or failed row — never a bystander service that merely appears in the
+journey.
+
+BEFORE/AFTER rule: the request also carries candidate_code — the VERBATIM source
+of the real methods this ticket plausibly concerns. Read it and pick the method
+whose body actually omits the check the incident describes. Then:
+- "before" MUST be that method's real source, copied verbatim (3+ lines). Never
+  write "// existing logic" or a paraphrase — a reviewer must be able to diff it
+  against the file.
+- "after" MUST be that same method with the smallest change that adds the missing
+  check, in this codebase's Spring/JPA style (@Transactional, repositories,
+  injected collaborators). It must compile against the REAL types and fields you
+  were shown: if a field is an enum set an enum constant, never a string; call
+  methods that exist on the real repositories, never an invented helper.
+- Never propose changing a method that already behaves correctly. If no candidate
+  body is genuinely missing a check, return code_fix: null and say so in
+  next_steps instead of inventing one.
+
+A prose sentence as before/after is a failed answer — write compilable-looking code."""
 
 
 def config() -> dict:

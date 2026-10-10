@@ -1,0 +1,155 @@
+<div class="page">
+  <!-- status row -->
+  @if (health(); as h) {
+    <div class="statusbar">
+      @for (s of statusChips(); track s.label) {
+        <span class="chip" [class.ok]="s.ok" [class.bad]="!s.ok" [title]="s.detail">{{ s.label }}</span>
+      }
+    </div>
+  }
+
+  <header class="intro">
+    <h1>BugZero</h1>
+    <p class="muted">
+      Turn an application issue into an evidence-backed diagnosis with a clear, actionable fix —
+      then hand it to the developer who can close it.
+    </p>
+  </header>
+
+  <!-- stage 1: intake -->
+  <section class="card">
+    <h3>1 · Incident input</h3>
+    @if (issueSource() === 'incident-queue') {
+      <div class="notice">
+        Jira is not configured — showing the built-in incident queue:
+        <strong>{{ httpFailureCount() }} HTTP/platform-failure</strong> tickets and
+        {{ domainCount() }} domain tickets, plus {{ liveCount() }} live findings from the databases.
+      </div>
+    }
+
+    @if (jiraIssues().length) {
+      <div class="filters">
+        <input type="text" [ngModel]="issueFilter()" (ngModelChange)="issueFilter.set($event)"
+               placeholder="Filter by ticket, title or status code" aria-label="Filter tickets" />
+        <div class="tabs small">
+          <button [class.active]="issueKind() === 'all'" (click)="issueKind.set('all')">All</button>
+          <button [class.active]="issueKind() === 'http'" (click)="issueKind.set('http')">HTTP failures</button>
+          <button [class.active]="issueKind() === 'domain'" (click)="issueKind.set('domain')">Domain</button>
+        </div>
+      </div>
+
+      <div class="queue">
+        @for (issue of visibleIssues(); track issue.id) {
+          <button class="issue" [class.sel]="selectedIssue() === issue.id" (click)="pickIssue(issue)">
+            <span class="key">{{ issue.id }}</span>
+            <span class="sum">{{ issue.title }}</span>
+            <span class="st">
+              @if (issue.http_status) {
+                <span class="code">{{ httpCode(issue.http_status) }}</span>
+              }
+              {{ issue.priority }}
+              @if (issue.requires_chaos) { <span class="chaos" title="Needs CHAOS_ENABLED=true on a service">chaos</span> }
+            </span>
+          </button>
+        } @empty {
+          <p class="muted small">No ticket matches that filter.</p>
+        }
+      </div>
+      <p class="muted small">
+        Picking a ticket investigates it immediately. Or paste an incident below to investigate something not in the queue.
+      </p>
+    } @else {
+      <p class="muted small">
+        No tickets loaded — {{ health()?.sources?.jira?.detail ?? 'Jira not configured' }}.
+        Paste an incident below instead.
+      </p>
+    }
+
+    <div class="composer">
+      <textarea
+        [ngModel]="text()"
+        (ngModelChange)="text.set($event)"
+        rows="3"
+        placeholder="e.g. Order ORD-68D80E09 is stuck in PAYMENT_PENDING since the incident"></textarea>
+      <button class="btn" (click)="runText()" [disabled]="busy() !== null">
+        {{ busy() === 'text' ? 'Investigating…' : 'Investigate' }}
+      </button>
+    </div>
+    @if (error()) { <div class="alert warn">{{ error() }}</div> }
+  </section>
+
+  @if (investigation(); as inv) {
+    <!-- stages 2-5 -->
+    <section class="card">
+      <h3>2–5 · Investigation pipeline</h3>
+      <app-pipeline-timeline [stages]="stages()" />
+      @if (inv.investigation_ref) {
+        <p class="muted small">Saved as {{ inv.investigation_ref }}</p>
+      }
+    </section>
+
+    @if (verdict(); as v) {
+      <section class="card verdict" [attr.data-fix]="v.fix_type">
+        <div class="head">
+          <span class="badge">{{ v.fix_type }}</span>
+          <span class="badge conf">{{ v.confidence }} confidence</span>
+        </div>
+        <p class="summary">{{ v.summary }}</p>
+        <p class="cause"><strong>Root cause:</strong> {{ v.root_cause }}</p>
+      </section>
+    }
+
+    <nav class="tabs">
+      <button [class.active]="section() === 'evidence'" (click)="section.set('evidence')">Evidence</button>
+      <button [class.active]="section() === 'code'" (click)="section.set('code')">Code location</button>
+      <button [class.active]="section() === 'rca'" (click)="section.set('rca')">RCA</button>
+    </nav>
+
+    @switch (section()) {
+      @case ('evidence') {
+        <section class="card">
+          <h3>Evidence</h3>
+          @if (inv.correlations?.length) {
+            <p class="small muted">Correlation IDs: <code>{{ inv.correlations!.join(', ') }}</code></p>
+          }
+          @if (inv.journey?.length) {
+            <table class="grid">
+              <thead><tr><th>Time</th><th>Service</th><th>Event</th><th>Status</th></tr></thead>
+              <tbody>
+                @for (j of inv.journey!; track $index) {
+                  <tr><td class="mono">{{ j.time }}</td><td>{{ j.service }}</td><td class="mono">{{ j.event }}</td><td class="mono">{{ j.status }}</td></tr>
+                }
+              </tbody>
+            </table>
+          }
+          <h4 class="small">Raw correlated lines ({{ inv.log_stats?.lines ?? 0 }})</h4>
+          <pre class="log">{{ lineText(inv) }}</pre>
+        </section>
+      }
+      @case ('code') {
+        <section class="card">
+          <h3>Code location</h3>
+          @if (codeLocation(); as loc) {
+            <p class="mono small">{{ loc.file }}:{{ loc.start_line }}-{{ loc.end_line }}</p>
+            <pre class="log">{{ loc.source }}</pre>
+          } @else {
+            <p class="muted">Set PRODUCT_REPO_ROOT so BugZero can ground the fix in real file and line numbers.</p>
+          }
+        </section>
+      }
+      @case ('rca') {
+        <section class="card">
+          <h3>Root cause analysis</h3>
+          <p class="muted small">Preview the handoff below to generate the downloadable RCA.</p>
+        </section>
+      }
+    }
+
+    <!-- stage 5 output -->
+    <app-handoff-panel
+      [incidentText]="inv.incident_text"
+      [sourceIssue]="sourceIssueLabel()"
+      [investigation]="inv"
+      (completed)="onHandoffDone($event)" />
+  }
+</div>

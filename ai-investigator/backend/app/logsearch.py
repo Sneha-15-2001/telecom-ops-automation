@@ -1,15 +1,22 @@
-"""Targeted log search (Phase 14) — never dumps whole files.
+"""Targeted log search — never dumps whole files.
 
 Strategy (mirrors scripts/search-logs.sh, but bounded for API use):
 1. Scan each service's app.log for lines matching any extracted identifier.
 2. Harvest correlation IDs from those hits.
 3. Expand: pull every line carrying those correlation IDs (cap 300).
 4. Sort by timestamp, derive the service journey (service → event → status).
+
+Three sources, tried in order — remote SSH (production hosts), the local log
+HTTP server, then local files. Each returns the same [{service, line}] shape, so
+the search logic above is identical regardless of where the bytes came from.
 """
 
+import functools
 import os
 import re
 from pathlib import Path
+
+from . import ssh_collector
 
 SERVICES = [
     "customer-service",
@@ -53,12 +60,29 @@ def _iter_lines(service: str):
             if path.suffix == ".gz":
                 fh = gzip.open(path, "rt", encoding="utf-8", errors="replace")
             else:
-                fh = open(path, encoding="utf-8", errors="replace")
+                fh = open(path, "r", encoding="utf-8", errors="replace")
         except OSError:
             continue
         with fh:
             for line in fh:
                 yield line.rstrip("\n")
+
+
+@functools.lru_cache(maxsize=1)
+def _ssh_snapshot():
+    """One SSH pull per investigation, cached across all five services.
+
+    Collection is the expensive step — one SFTP session beats five — so we fetch
+    once and slice per service. Cached so a single investigate() call that walks
+    each service twice (hits, then correlation expansion) does not re-transfer.
+    """
+    result = ssh_collector.collect()
+    return result if result.get("ok") else None
+
+
+def _reset_ssh_cache():
+    """Drop the cached snapshot (after a write, or in tests)."""
+    _ssh_snapshot.cache_clear()
 
 
 def _iter_lines_http(service: str):
@@ -72,6 +96,22 @@ def _iter_lines_http(service: str):
             yield line
     except Exception:
         return
+
+
+def active_source() -> dict:
+    """Which log source this process will actually read, for the console status row."""
+    if ssh_collector.is_ssh_configured():
+        snap = _ssh_snapshot()
+        if snap:
+            return {"mode": "ssh", "host": snap.get("host"),
+                    "remote_root": snap.get("remote_root"),
+                    "lines_available": len(snap.get("lines", [])),
+                    "detail": "reading approved server over SSH"}
+        return {"mode": "ssh", "host": ssh_collector.ssh_config()["host"],
+                "lines_available": 0, "error": "SSH configured but unreachable"}
+    if LOG_PULL_BASE:
+        return {"mode": "http", "endpoint": LOG_PULL_BASE, "detail": "pulling log server"}
+    return {"mode": "file", "root": str(LOG_ROOT), "detail": "reading local files"}
 
 
 def search(entities: dict) -> dict:
@@ -98,9 +138,22 @@ def search(entities: dict) -> dict:
 
     hits: list = []
     correlations: set = set()
+    source = active_source()
+
+    def _lines(service: str):
+        """Yield raw lines from the active source for one service."""
+        if source["mode"] == "ssh":
+            snap = _ssh_snapshot()
+            if snap:
+                for h in snap["lines"]:
+                    if h["service"] == service:
+                        yield h["line"]
+            return
+        yield from _iter_lines(service)
+
     if needles or id_res:
         for svc in SERVICES:
-            for line in _iter_lines(svc):
+            for line in _lines(svc):
                 if _hit(line.lower(), line):
                     hits.append({"service": svc, "line": line})
                     m = CORR_RE.search(line)
@@ -110,7 +163,7 @@ def search(entities: dict) -> dict:
     expanded: list = []
     if correlations:
         for svc in SERVICES:
-            for line in _iter_lines(svc):
+            for line in _lines(svc):
                 m = CORR_RE.search(line)
                 if m and m.group(2) in correlations:
                     expanded.append({"service": svc, "line": line})
@@ -141,4 +194,5 @@ def search(entities: dict) -> dict:
         "direct_hits": len(hits),
         "log_lines": pool[:MAX_EXPANDED],
         "journey": journey,
+        "source": source,
     }

@@ -32,6 +32,14 @@ STATUS_WORDS = [
 ERROR_HINTS = [
     "MISSING_MSISDN", "MISSING_RESOURCE", "MISSING_IDENTIFIER", "INVENTORY_SHORTAGE",
     "CUSTOMER_INVALID", "CUSTOMER_NOT_FOUND", "CUSTOMER_SERVICE_UNAVAILABLE",
+    # Platform-level failures. These come from the HTTP contract rather than the
+    # order domain, so the ticket may name the status instead of a domain word.
+    "DEPENDENCY_UNAVAILABLE", "UPSTREAM_ERROR", "BAD_GATEWAY", "NOT_IMPLEMENTED",
+    "RATE_LIMIT_EXCEEDED", "SERVICE_UNAVAILABLE", "INTERNAL_ERROR", "INVALID_PARAMETER",
+    "ORDER_STATE_INVALID", "CUSTOMER_STATE_INVALID", "RESOURCE_STATE_INVALID",
+    "PROVISIONING_STATE_INVALID", "NOTIFICATION_STATE_INVALID", "CONSTRAINT_VIOLATION",
+    "UNSUPPORTED_MEDIA_TYPE", "METHOD_NOT_ALLOWED", "TOO_MANY_REQUESTS",
+    "502", "503", "501", "500", "429", "415", "409",
     "stuck", "expired", "leak", "duplicate", "mismatch", "failed", "rejected",
     "timeout", "breach", "overcharge", "refused",
 ]

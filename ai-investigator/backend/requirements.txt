@@ -1,3 +1,11 @@
 fastapi==0.109.2
 uvicorn==0.27.1
 psycopg2-binary==2.9.9
+
+# Optional — both degrade cleanly when absent.
+#   paramiko    : SSH log collection from approved servers (ssh_collector.py)
+#   langchain   : LCEL reasoning chain (chains.py). Without it the stdlib
+#                 urllib transport in llmreason.py is used instead.
+paramiko==3.4.0
+langchain-core>=0.2.0
+langchain-openai>=0.1.0

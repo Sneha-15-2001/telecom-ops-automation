@@ -1,40 +1,96 @@
 #!/bin/bash
-# Start the whole stack in order: PostgreSQL -> 5 Java services.
-# Run from the repo root: bash scripts/start-all.sh
-# Env overrides: POSTGRES_HOST/PORT/USER/PASSWORD, JAVA_HOME
+# Start the entire stack: PostgreSQL, 5 Java services, both frontends,
+# the BugZero API, and the log server.
+#
+#   bash scripts/start-all.sh      # bring everything up
+#   bash scripts/stop-all.sh       # bring it all down
+#   bash scripts/status.sh         # what is running
+#
+# Every service is started from the repo root on purpose. LOG_PATH defaults to
+# a RELATIVE "logs" directory, so a service started from inside its own folder
+# writes to a second, orphaned log directory and the cross-service trace
+# silently breaks. This script is the safe way to run them.
 set -uo pipefail
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PRODUCT="${PRODUCT_REPO:-$ROOT/../telecom-order-provisioning}"
+LOGS="${LOG_PATH:-$PRODUCT/logs}"
+
+export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
+export PATH="$JAVA_HOME/bin:$PATH"
 export POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 export POSTGRES_PORT="${POSTGRES_PORT:-5433}"
 export POSTGRES_USER="${POSTGRES_USER:-postgres}"
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
-export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
-export PATH="$JAVA_HOME/bin:$PATH"
+export LOG_PATH="$LOGS"
+export PRODUCT_REPO_ROOT="$PRODUCT"
+
+# Chaos fault injection, needed by incident scenarios 15, 16 and 21.
+export CHAOS_ENABLED="${CHAOS_ENABLED:-true}"
+
+PG_BIN=/Library/PostgreSQL/18/bin
+PG_DATA="$HOME/.local/share/telecom-pg"
+
+SERVICES="customer-service order-service inventory-service provisioning-service notification-service"
+
+wait_for() {  # wait_for <url> <label> <seconds>
+  local url=$1 label=$2 limit=${3:-60} i=0
+  while [ $i -lt "$limit" ]; do
+    curl -s -m 2 "$url" >/dev/null 2>&1 && { echo "  $label ready"; return 0; }
+    sleep 2; i=$((i+2))
+  done
+  echo "  $label TIMED OUT — check /tmp/$label.log"
+  return 1
+}
 
 echo "== PostgreSQL :$POSTGRES_PORT =="
-if /Library/PostgreSQL/18/bin/pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" 2>/dev/null | grep -q accepting; then
-  echo "already up"
+if $PG_BIN/pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" 2>/dev/null | grep -q accepting; then
+  echo "  already up"
 else
-  /Library/PostgreSQL/18/bin/pg_ctl -D ~/.local/share/telecom-pg -l ~/.local/share/telecom-pg.log start
+  $PG_BIN/pg_ctl -D "$PG_DATA" -l "$PG_DATA.log" start >/dev/null 2>&1
+  sleep 4
+  $PG_BIN/pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" && echo "  started" || echo "  FAILED"
 fi
 
-echo "== microservices =="
-cd "$ROOT"
-for svc in customer-service order-service inventory-service provisioning-service notification-service; do
-  port=$(grep -A1 "^server:" "$svc/src/main/resources/application.yml" | grep -oE "808[0-9]" | head -1)
-  if curl -s -m 3 "http://localhost:$port/actuator/health" 2>/dev/null | grep -q '"status":"UP"'; then
-    echo "$svc :$port already UP"
-  else
-    nohup java -jar "$svc/target/$svc-0.0.1-SNAPSHOT.jar" > "/tmp/$svc.log" 2>&1 &
-    echo "$svc :$port starting (pid $!)"
+echo "== Java services =="
+cd "$PRODUCT" || { echo "product repo not found at $PRODUCT"; exit 1; }
+for svc in $SERVICES; do
+  jar="$svc/target/$svc-0.0.1-SNAPSHOT.jar"
+  if [ ! -f "$jar" ]; then
+    echo "  $svc — no jar yet (run scripts/build.sh)"
+    continue
   fi
+  # Always launched from the repo root so LOG_PATH resolves identically.
+  nohup java -jar "$jar" > "/tmp/$svc.log" 2>&1 &
+  disown
+  echo "  $svc starting (pid $!)"
 done
-echo "wait ~25s, then: for p in 8081 8082 8083 8084 8085; do curl -s http://localhost:$p/actuator/health | head -c 16; echo; done"
 
-echo "== frontends + AI (background, logs in /tmp) =="
-cd "$ROOT/frontend/telecom-order-ui" && nohup npm start > /tmp/ng.log 2>&1 & echo "angular :4200 (pid $!)"
-cd "$ROOT/ai-investigator/frontend" && nohup npx vite --port 5173 --strictPort > /tmp/vite.log 2>&1 & echo "react :5173 (pid $!)"
-cd "$ROOT/ai-investigator/backend" && POSTGRES_HOST="$POSTGRES_HOST" POSTGRES_PORT="$POSTGRES_PORT" POSTGRES_USER="$POSTGRES_USER" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-  nohup python3 -m uvicorn app.main:app --port 8090 > /tmp/ai-backend.log 2>&1 & echo "ai-investigator :8090 (pid $!)"
-cd "$ROOT/ai-investigator/logserver" && nohup python3 server.py > /tmp/logserver.log 2>&1 & echo "log-server 127.0.0.1:8899 (pid $!)"
-echo "UIs need ~40s for first compile. Then open http://localhost:4200 (chat bubble bottom-right)."
+declare -A PORT=( [customer-service]=8081 [order-service]=8082 [inventory-service]=8083 \
+                  [provisioning-service]=8084 [notification-service]=8085 )
+for svc in $SERVICES; do
+  wait_for "http://localhost:${PORT[$svc]}/actuator/health" "$svc" 70
+done
+
+echo "== Frontends and AI =="
+cd "$PRODUCT/frontend/telecom-order-ui"  && nohup npm start > /tmp/ng.log 2>&1 &
+disown; echo "  order UI        :4200"
+cd "$ROOT/ai-investigator/console"       && nohup npx ng serve --port 4201 > /tmp/bz-console.log 2>&1 &
+disown; echo "  BugZero console :4201"
+cd "$ROOT/ai-investigator/backend"       && nohup python3 -m uvicorn app.main:app --port 8090 > /tmp/ai-backend.log 2>&1 &
+disown; echo "  BugZero API     :8090"
+cd "$ROOT/ai-investigator/logserver"     && LOG_ROOT="$LOGS" nohup python3 server.py > /tmp/logserver.log 2>&1 &
+disown; echo "  log server      :8899"
+
+wait_for "http://localhost:4200" "order UI" 90
+wait_for "http://localhost:4201" "bugzero console" 90
+wait_for "http://localhost:8090/api/health" "bugzero API" 30
+
+echo
+echo "Everything is up."
+echo "  Order UI        http://localhost:4200"
+echo "  BugZero console http://localhost:4201"
+echo "  BugZero API     http://localhost:8090/docs"
+echo
+echo "Check what is running:  bash scripts/status.sh"
+echo "Shut it all down:      bash scripts/stop-all.sh"

@@ -55,7 +55,7 @@ def find_class(service: str, classname: str):
 
 
 def get_method(service: str, classname: str, method: str):
-    """Return {file, start_line, end_line, source} for a method, or None."""
+    """Return {file, name, start_line, end_line, source} for a method, or None."""
     root = _service_dir(service)
     if not root or not root.exists():
         return None
@@ -92,7 +92,7 @@ def get_method(service: str, classname: str, method: str):
         rel = str(path.relative_to(REPO_ROOT))
     except ValueError:
         rel = str(path)
-    return {"file": rel, "start_line": start + 1, "end_line": end + 1,
+    return {"file": rel, "name": method, "start_line": start + 1, "end_line": end + 1,
             "source": "\n".join(lines[start:end + 1])}
 
 
@@ -114,6 +114,101 @@ def locate(service: str, area: str):
         hit = get_method(service, classname, m)
         if hit:
             out["methods"].append(hit)
+    return out
+
+
+def relevant(ticket_text: str, services=None, limit: int = 6) -> list:
+    """Method BODIES for the methods a ticket plausibly points at.
+
+    catalog() gives the model names only, so it guesses: asked about a payment
+    that was "recorded but not validated" it picks record() and proposes marking
+    the payment VALIDATED at write time — wrong method, and a fix that would
+    mark payments validated before any check ran.
+
+    Showing the actual source of the few methods the ticket's words overlap
+    gives the model enough to pick the right one. Matching is by token overlap
+    with the ticket plus the domain nouns, and the body is truncated, so this
+    stays cheap.
+    """
+    if not REPO_ROOT.exists():
+        return []
+    cat = catalog()
+    if not cat:
+        return []
+
+    # Tokens worth matching on: domain nouns plus anything substantial from the
+    # ticket itself. Common English words are dropped so "the" never matches.
+    stop = {"the", "and", "for", "with", "not", "but", "has", "was", "are", "this",
+            "that", "from", "into", "when", "then", "they", "have", "order", "incident",
+            "ticket", "issue", "error", "customer", "please", "check", "should", "would",
+            "never", "always", "still", "after", "before", "while", "being", "each"}
+    words = set()
+    for w in re.findall(r"[A-Za-z][A-Za-z0-9]{2,}", ticket_text or ""):
+        low = w.lower()
+        # Identifiers like ORD-F6CCF2B1 are noise: they substring-match real
+        # words ("ord" inside "record") and would send the model to the wrong method.
+        if len(low) < 4 or any(ch.isdigit() for ch in low) or low in stop:
+            continue
+        words.add(low)
+    # Domain nouns the ticket may not spell out but the failure is about.
+    words |= {"payment", "validate", "reserve", "activate", "notify", "cancel",
+              "rollback", "fulfil", "provision", "hold", "status", "state"}
+
+    scored = []
+    for key, methods in cat.items():
+        service, _, classname = key.partition(":")
+        if services and not any(s.split("-")[0] in service for s in services):
+            continue
+        cl = classname.lower()
+        # A class named for the domain noun is a stronger signal than a method
+        # whose name happens to contain one — "PaymentService" beats "record".
+        class_score = sum(2 for w in words if w in cl)
+        if not class_score:
+            continue
+        # Controllers and clients are thin adapters that delegate; the defect is
+        # essentially never there. Bias hard toward the service layer.
+        adapter = classname.endswith("Controller") or classname.endswith("Client")
+        # Entities are pure data holders — every method is a getter or setter, so
+        # a fix never belongs in one. They otherwise crowd the top on their
+        # class-name match alone.
+        entity = methods and all(
+            m.startswith(("get", "set", "is", "has", "to")) for m in methods)
+        for method in methods:
+            low = method.lower()
+            score = class_score + sum(1 for w in words if w in low)
+            if adapter:
+                score = score - 4   # sink, but do not erase outright
+            if entity:
+                score = score - 6
+            if score > 0:
+                scored.append((score, service, classname, method))
+    scored.sort(key=lambda x: (-x[0], x[3]))
+    if not scored:
+        return []
+
+    out = []
+    seen = set()
+    per_class = {}
+    for score, service, classname, method in scored:
+        # Cap per class so one large class cannot crowd out the others.
+        if per_class.get(classname, 0) >= 2:
+            continue
+        if (classname, method) in seen:
+            continue
+        seen.add((classname, method))
+        hit = get_method(service, classname, method)
+        if hit:
+            out.append({
+                "service": service,
+                "class_name": classname,
+                "method": method,
+                "file": hit["file"],
+                "start_line": hit["start_line"],
+                "source": hit["source"][:1800],
+            })
+            per_class[classname] = per_class.get(classname, 0) + 1
+        if len(out) >= limit:
+            break
     return out
 
 

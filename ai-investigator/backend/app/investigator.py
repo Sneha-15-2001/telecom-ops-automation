@@ -100,12 +100,28 @@ def investigate(incident_text: str, mode: str = "llm") -> dict:
     from . import logsearch as _ls
     raw_lines = [f"[{h['service']}] {h['line']}" for h in logs["log_lines"][:60]]
     from . import codeindex as _ci
+    # Services that actually appear in the correlated journey, plus any holding
+    # failed rows. Empty means "don't filter" — better to show the model real
+    # code than none.
+    touched = sorted({j.get("service") for j in logs["journey"] if j.get("service")})
+    suspect_services = touched or _owner_from_evidence(db)["services"]
+    candidate_code = _ci.relevant(incident_text, suspect_services)
     llm = llmreason.reason(incident_text, {
         "entities": entities,
         "journey": logs["journey"],
         "raw_log_lines": raw_lines,
         "db_evidence": db,
         "code_catalog": _ci.catalog(),
+        "candidate_code": candidate_code,
+        "instruction": ("candidate_code holds the REAL source of the methods this "
+                        "ticket plausibly concerns, best match first. If it is "
+                        "non-empty, class_name AND method MUST be copied from it — "
+                        "the catalog is a fallback for when it is empty. Read the "
+                        "bodies and pick the one that actually omits the check the "
+                        "incident describes. Do not pick a method merely because "
+                        "the ticket echoes its name. Do not propose changing a "
+                        "method that already behaves correctly. Match real types "
+                        "exactly: enum fields take enum constants, never strings."),
     })
     result = {
         "incident_text": incident_text,
@@ -117,6 +133,7 @@ def investigate(incident_text: str, mode: str = "llm") -> dict:
         "db_evidence": db,
         "has_error": has_error,
         "owner": _owner_from_evidence(db),
+        "candidate_code": candidate_code,
         "verdict": None,
         "mode": mode,
         "llm": llm,

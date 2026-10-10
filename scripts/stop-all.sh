@@ -1,12 +1,20 @@
 #!/bin/bash
-# Stop the stack: 5 Java services (+ optionally PostgreSQL with --db).
-# Run from the repo root: bash scripts/stop-all.sh [--db]
+# Stop everything start-all.sh started.
 set -uo pipefail
-pkill -f "java -jar .*(customer|order|inventory|provisioning|notification)-service" 2>/dev/null || true
-pkill -f "java -jar" 2>/dev/null || true
-sleep 3
-left=$(ps aux | grep -c "[j]ava -jar" || true)
-echo "java services remaining: $left"
-if [ "${1:-}" = "--db" ]; then
-  /Library/PostgreSQL/18/bin/pg_ctl -D ~/.local/share/telecom-pg stop 2>&1 | tail -1
-fi
+cd "$(dirname "$0")/.." || exit 1
+
+for p in 4200 4201 8090 8899; do
+  pid=$(lsof -ti:$p 2>/dev/null)
+  [ -n "$pid" ] && kill $pid 2>/dev/null && echo "stopped :$p"
+done
+
+for p in 8081 8082 8083 8084 8085; do
+  pid=$(lsof -ti:$p 2>/dev/null | head -1)
+  [ -n "$pid" ] && kill $pid 2>/dev/null && echo "stopped :$p (Java service)"
+done
+
+# Any Java process still holding a built jar, in case a port moved.
+pkill -f "telecom-order-provisioning/.*/target/.*\.jar" 2>/dev/null && echo "stopped leftover Java services"
+
+echo "All stopped. PostgreSQL left running on purpose —"
+echo "stop it with: /Library/PostgreSQL/18/bin/pg_ctl -D ~/.local/share/telecom-pg stop"
